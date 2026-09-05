@@ -1,5 +1,8 @@
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { seedCases } from '../data/cases.js'
+import { buildCaseFacts } from '../data/caseFacts.js'
+import { PLACEHOLDER_TITLE, suggestTitle } from '../data/caseTitle.js'
+import { deleteCaseDocuments } from '../data/documentStore.js'
 
 const CaseContext = createContext(null)
 
@@ -72,6 +75,28 @@ export function CaseProvider({ children }) {
     localStorage.setItem(CASES_KEY, JSON.stringify(cases))
   }, [cases])
 
+  // Backfills the AI title for any completed case still carrying the
+  // placeholder (saved before the feature existed, or while the API was
+  // unreachable). Each case is attempted once per page load.
+  const titleAttempted = useRef(new Set())
+  useEffect(() => {
+    if (!user) return
+    for (const c of cases) {
+      if (!c.intakeAnswers || c.title !== PLACEHOLDER_TITLE || titleAttempted.current.has(c.id)) continue
+      titleAttempted.current.add(c.id)
+      suggestTitle(buildCaseFacts(c)).then((suggested) => {
+        if (!suggested?.title) return
+        setCases((prev) =>
+          prev.map((x) =>
+            x.id === c.id && x.title === PLACEHOLDER_TITLE
+              ? { ...x, title: suggested.title, respondent: suggested.respondent || x.respondent }
+              : x,
+          ),
+        )
+      })
+    }
+  }, [user, cases])
+
   const value = useMemo(
     () => ({
       user,
@@ -137,7 +162,7 @@ export function CaseProvider({ children }) {
         const newCase = {
           id,
           ref: `CP-${year}-${seq}`,
-          title: 'New matter',
+          title: PLACEHOLDER_TITLE,
           claimType: 'Not yet specified',
           respondent: 'Not yet specified',
           amount: 0,
@@ -166,7 +191,10 @@ export function CaseProvider({ children }) {
         setCases((prev) => [...prev, newCase])
         return id
       },
-      removeCase: (caseId) => setCases((prev) => prev.filter((c) => c.id !== caseId)),
+      removeCase: (caseId) => {
+        setCases((prev) => prev.filter((c) => c.id !== caseId))
+        deleteCaseDocuments(caseId).catch(() => {})
+      },
       updateCase: (caseId, patch) =>
         setCases((prev) => prev.map((c) => (c.id === caseId ? { ...c, ...patch } : c))),
       updateEvent: (caseId, eventId, patch) =>

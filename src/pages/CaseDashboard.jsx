@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
-import { stages, simulatedUpdates } from '../data/caseEvents.js'
+import { stages, simulatedUpdates, currentStageOf } from '../data/caseEvents.js'
 import { openQuestions } from '../data/questions.js'
 import Timeline from '../components/Timeline.jsx'
 import DisclaimerModal from '../components/DisclaimerModal.jsx'
@@ -10,6 +10,9 @@ import SuperEventForm from '../components/SuperEventForm.jsx'
 import SuperCaseForm from '../components/SuperCaseForm.jsx'
 import RealityCheck from './RealityCheck.jsx'
 import CaseSummary from './CaseSummary.jsx'
+import EvidenceMap from './EvidenceMap.jsx'
+
+const eyebrowByView = { reality: 'Reality Check', summary: 'Case summary', evidence: 'Evidence map' }
 
 const navItems = [
   { key: 'home', label: 'Home', icon: '⌂' },
@@ -21,7 +24,6 @@ const navItems = [
 ]
 
 const nextStepByStage = {
-  0: 'Confirm the SCT is the right forum, then invite the respondent to negotiate on CJTS.',
   1: 'Wait for the respondent to engage. If they do not, prepare your statement of claim.',
   2: 'Check that every fact in your narrative has a labelled attachment behind it.',
   3: 'Read the Response carefully. Update your Reality Check with the respondent\'s version of events.',
@@ -51,7 +53,14 @@ export default function CaseDashboard() {
   if (!caseData) return <Navigate to="/dashboard" replace />
 
   const { events, intakeAnswers, ref, title, claimType, respondent, amount, summary, healthOverride } = caseData
-  const currentStage = events.reduce((max, ev) => Math.max(max, ev.stage), 0)
+  const maxEventStage = events.reduce((max, ev) => Math.max(max, ev.stage), 0)
+  const currentStage = currentStageOf(events)
+  // Nothing has happened beyond the forum check yet, so the claimant has
+  // not actually opened negotiation — say that rather than "wait".
+  const nextStep =
+    maxEventStage < 1
+      ? 'Invite the respondent to negotiate on CJTS.'
+      : nextStepByStage[currentStage]
   const correspondence = events.filter((ev) => ev.type === 'court' || ev.type === 'respondent')
   const questionIds = openQuestions.map((q) => q.id)
   const derivedAnswered = intakeAnswers ? questionIds.filter((id) => intakeAnswers[id] !== undefined).length : 0
@@ -152,9 +161,7 @@ export default function CaseDashboard() {
         <main className="content">
           <div className="content-head on-bg">
             <div>
-              <div className="eyebrow">
-                {active === 'reality' ? 'Reality Check' : active === 'summary' ? 'Case summary' : 'Home'}
-              </div>
+              <div className="eyebrow">{eyebrowByView[active] ?? 'Home'}</div>
               <h1>{title}</h1>
               <p>Welcome back, {user.name}.</p>
             </div>
@@ -167,6 +174,8 @@ export default function CaseDashboard() {
             <RealityCheck caseData={caseData} />
           ) : active === 'summary' ? (
             <CaseSummary caseData={caseData} />
+          ) : active === 'evidence' ? (
+            <EvidenceMap caseData={caseData} />
           ) : (
             <>
               <section className="card stage-card">
@@ -186,7 +195,7 @@ export default function CaseDashboard() {
                   ))}
                 </ol>
                 <div className="next-step">
-                  <strong>Suggested next step:</strong> {nextStepByStage[currentStage]}
+                  <strong>Suggested next step:</strong> {nextStep}
                 </div>
               </section>
 

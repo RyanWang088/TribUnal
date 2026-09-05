@@ -5,29 +5,7 @@ import { openQuestions } from '../data/questions.js'
 import { eligibilityQuestions, evaluateEligibility } from '../data/eligibility.js'
 import EligibilityCheck from '../components/EligibilityCheck.jsx'
 import { buildCaseFacts } from '../data/caseFacts.js'
-
-// Asks the model for a short neutral title (and the respondent's name, if
-// the claimant stated one). Best-effort: any failure returns null and the
-// case keeps its placeholder title rather than blocking the save.
-async function suggestTitle(sourceFacts) {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 20000)
-  try {
-    const res = await fetch('/api/case-title', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sourceFacts }),
-      signal: controller.signal,
-    })
-    if (!res.ok) return null
-    const data = await res.json()
-    return { title: data.title || '', respondent: data.respondent || '' }
-  } catch {
-    return null
-  } finally {
-    clearTimeout(timer)
-  }
-}
+import { suggestTitle } from '../data/caseTitle.js'
 
 // Step 1: SCT eligibility screen. Answers are evaluated silently; a failing
 // answer ends the intake and returns the claimant to the dashboard. No

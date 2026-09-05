@@ -13,6 +13,13 @@ export const stages = [
   { id: 6, label: 'Order & enforcement' },
 ]
 
+// Where the case has reached. Stage 0 (forum check) is complete for every
+// case that exists: a case file is only opened once the eligibility
+// questionnaire has passed, so no live case sits at stage 0.
+export function currentStageOf(events) {
+  return Math.max(events.reduce((max, ev) => Math.max(max, ev.stage), 0), 1)
+}
+
 export const initialEvents = [
   {
     id: 'seed-1',

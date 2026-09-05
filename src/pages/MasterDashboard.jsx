@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
-import { stages } from '../data/caseEvents.js'
+import { stages, currentStageOf } from '../data/caseEvents.js'
 import CaseCalendar from '../components/CaseCalendar.jsx'
 import SuperBadge from '../components/SuperBadge.jsx'
 import SuperCaseForm from '../components/SuperCaseForm.jsx'
@@ -105,7 +105,7 @@ export default function MasterDashboard() {
           </div>
           <div className="case-cards">
             {cases.map((c) => {
-              const currentStage = c.events.reduce((max, ev) => Math.max(max, ev.stage), 0)
+              const currentStage = currentStageOf(c.events)
               if (editingId === c.id) {
                 return (
                   <div key={c.id} className="case-card case-card-editing">
