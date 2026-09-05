@@ -125,11 +125,18 @@ export function CaseProvider({ children }) {
       // in `upcomingDates` and correctly stays off the master calendar
       // until it progresses further.
       addCase: () => {
-        const seq = String(cases.length + 1).padStart(4, '0')
-        const id = `cp-2026-${seq}-${Date.now().toString(36)}`
+        const year = new Date().getFullYear()
+        // Next number after the highest existing ref, so deleting a case
+        // never causes a later one to reuse its number.
+        const highest = cases.reduce((max, c) => {
+          const n = Number(/^CP-\d{4}-(\d+)$/.exec(c.ref ?? '')?.[1])
+          return Number.isFinite(n) ? Math.max(max, n) : max
+        }, 0)
+        const seq = String(highest + 1).padStart(4, '0')
+        const id = `cp-${year}-${seq}-${Date.now().toString(36)}`
         const newCase = {
           id,
-          ref: `CP-2026-${seq}`,
+          ref: `CP-${year}-${seq}`,
           title: 'New matter',
           claimType: 'Not yet specified',
           respondent: 'Not yet specified',
@@ -174,16 +181,21 @@ export function CaseProvider({ children }) {
         setCases((prev) =>
           prev.map((c) => (c.id === caseId ? { ...c, events: c.events.filter((ev) => ev.id !== eventId) } : c)),
         ),
-      saveIntake: (caseId, answers, eligibility) => {
+      // `meta` carries what the intake derived about the case: the
+      // eligibility answers, amount and claim type, plus the AI-suggested
+      // title and respondent (either may be missing if the model call failed).
+      saveIntake: (caseId, answers, meta) => {
         setCases((prev) =>
           prev.map((c) =>
             c.id === caseId
               ? {
                   ...c,
                   intakeAnswers: answers,
-                  eligibility: eligibility?.answers ?? c.eligibility ?? null,
-                  amount: eligibility?.amount ?? c.amount,
-                  claimType: eligibility?.claimType ?? c.claimType,
+                  eligibility: meta?.answers ?? c.eligibility ?? null,
+                  amount: meta?.amount ?? c.amount,
+                  claimType: meta?.claimType ?? c.claimType,
+                  title: meta?.title || c.title,
+                  respondent: meta?.respondent || c.respondent,
                   events: [
                     ...c.events,
                     {

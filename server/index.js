@@ -380,6 +380,61 @@ app.post('/api/case-summary', async (req, res) => {
   }
 })
 
+// ---------------------------------------------------------------------------
+// Case title
+// ---------------------------------------------------------------------------
+
+const CASE_TITLE_TOOL = {
+  name: 'report_case_title',
+  description: 'Report a short neutral title for the case file and the respondent\'s name, if stated.',
+  parameters: {
+    type: 'object',
+    properties: {
+      title: {
+        type: 'string',
+        description:
+          'Three to eight words naming the subject of the dispute, like a court list heading: e.g. "Unrefunded motor vehicle deposit", "Incomplete renovation works". No party names, no legal conclusions such as "breach", "fraud" or "negligence".',
+      },
+      respondent: {
+        type: 'string',
+        description:
+          'The other party\'s name exactly as the claimant wrote it (person or business). Empty string if the claimant did not name them.',
+      },
+    },
+    required: ['title', 'respondent'],
+  },
+}
+
+const CASE_TITLE_PROMPT = `You label case files inside TribUnal, a case-preparation tool for self-represented claimants in \
+Singapore's Small Claims Tribunals. You will receive the claimant's own intake answers. Produce a short, neutral \
+title that describes what the dispute is about — never who is at fault or whether the claim is good. Copy the \
+respondent's name only if the claimant actually stated it; never guess. Always call the report_case_title tool.`
+
+app.post('/api/case-title', async (req, res) => {
+  if (!openai) return res.status(503).json({ error: NO_KEY_ERROR })
+
+  const { sourceFacts } = req.body ?? {}
+  if (!sourceFacts?.intakeAnswers) {
+    return res.status(400).json({ error: 'Intake answers are required to name the case.' })
+  }
+
+  try {
+    const raw = await runStructured({
+      system: CASE_TITLE_PROMPT,
+      user: { sourceFacts },
+      tool: CASE_TITLE_TOOL,
+      maxTokens: 200,
+    })
+    res.json({
+      title: String(raw.title ?? '').trim().slice(0, 80),
+      respondent: String(raw.respondent ?? '').trim().slice(0, 120),
+    })
+  } catch (err) {
+    console.error('Case title request failed:', err)
+    res.status(502).json({ error: err.message || 'Could not reach the model.' })
+  }
+})
+
 app.listen(PORT, () => {
   console.log(`TribUnal API server listening on http://localhost:${PORT}`)
   if (!apiKey) {

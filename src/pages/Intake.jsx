@@ -4,22 +4,50 @@ import { useCase } from '../context/CaseContext.jsx'
 import { openQuestions } from '../data/questions.js'
 import { eligibilityQuestions, evaluateEligibility } from '../data/eligibility.js'
 import EligibilityCheck from '../components/EligibilityCheck.jsx'
+import { buildCaseFacts } from '../data/caseFacts.js'
+
+// Asks the model for a short neutral title (and the respondent's name, if
+// the claimant stated one). Best-effort: any failure returns null and the
+// case keeps its placeholder title rather than blocking the save.
+async function suggestTitle(sourceFacts) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 20000)
+  try {
+    const res = await fetch('/api/case-title', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceFacts }),
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    return { title: data.title || '', respondent: data.respondent || '' }
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 // Step 1: SCT eligibility screen. Answers are evaluated silently; a failing
 // answer ends the intake and returns the claimant to the dashboard. No
 // per-answer verdicts are shown so the questions cannot lead the claimant.
 // Step 2: the open-ended questions.
+//
+// With no `case` query param this is a brand-new matter: the case file is
+// only created when the form is saved, so leaving early logs nothing.
 export default function Intake() {
-  const { cases, getCase, saveIntake, removeCase } = useCase()
+  const { getCase, saveIntake, removeCase, addCase } = useCase()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const caseId = searchParams.get('case') || cases[0]?.id
+  const caseId = searchParams.get('case')
   const [step, setStep] = useState(0)
   const [eligibility, setEligibility] = useState({})
   const [answers, setAnswers] = useState({})
   const [files, setFiles] = useState({})
   const [error, setError] = useState('')
   const [ineligible, setIneligible] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const evaluation = evaluateEligibility(eligibility)
 
@@ -63,15 +91,16 @@ export default function Intake() {
   }
 
   function leaveIneligible() {
-    const current = getCase(caseId)
+    const current = caseId ? getCase(caseId) : null
     if (current && !current.intakeAnswers) removeCase(caseId)
     navigate('/dashboard')
   }
 
   const openComplete = openQuestions.every((q) => (answers[q.id] ?? '').trim() !== '')
 
-  function submit(e) {
+  async function submit(e) {
     e.preventDefault()
+    if (saving) return
     if (!openComplete) {
       setError('Please answer every question.')
       return
@@ -79,12 +108,32 @@ export default function Intake() {
     const subject = eligibilityQuestions
       .find((q) => q.id === 'subject')
       .options.find((o) => o.value === eligibility.subject)
-    saveIntake(caseId, Object.keys(files).length ? { ...answers, files } : answers, {
+    const intakeAnswers = Object.keys(files).length ? { ...answers, files } : answers
+    const existing = caseId ? getCase(caseId) : null
+
+    setSaving(true)
+    const suggested = await suggestTitle(
+      buildCaseFacts({
+        ref: existing?.ref ?? '',
+        title: existing?.title ?? '',
+        claimType: subject?.label ?? '',
+        respondent: existing?.respondent ?? '',
+        amount: evaluation.amount ?? 0,
+        eligibility,
+        intakeAnswers,
+        events: existing?.events ?? [],
+      }),
+    )
+
+    const id = caseId ?? addCase()
+    saveIntake(id, intakeAnswers, {
       answers: eligibility,
       amount: evaluation.amount,
       claimType: subject?.label,
+      title: suggested?.title,
+      respondent: suggested?.respondent,
     })
-    navigate(`/case/${caseId}`)
+    navigate(`/case/${id}`)
   }
 
   return (
@@ -177,11 +226,11 @@ export default function Intake() {
             ))}
             {error && <div className="form-error">{error}</div>}
             <div className="form-actions">
-              <button type="button" className="btn btn-outline" onClick={() => setStep(0)}>
+              <button type="button" className="btn btn-outline" onClick={() => setStep(0)} disabled={saving}>
                 Back
               </button>
-              <button type="submit" className="btn btn-primary">
-                Save and go to my dashboard
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? 'Saving…' : 'Save and go to my dashboard'}
               </button>
             </div>
           </section>

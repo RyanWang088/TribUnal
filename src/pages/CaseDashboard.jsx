@@ -13,7 +13,6 @@ import CaseSummary from './CaseSummary.jsx'
 
 const navItems = [
   { key: 'home', label: 'Home', icon: '⌂' },
-  { key: 'case', label: 'My Case', icon: '▤' },
   { key: 'timeline', label: 'Timeline', icon: '◷' },
   { key: 'evidence', label: 'Evidence Map', icon: '◈' },
   { key: 'reality', label: 'Reality Check', icon: '⚑' },
@@ -94,6 +93,18 @@ export default function CaseDashboard() {
     navigate('/login')
   }
 
+  // Home always returns to the top. Relevant links lives at the bottom of
+  // the home view, so it may need a render first (when leaving Reality
+  // Check or Case summary) before there is anything to scroll to.
+  function selectNav(key) {
+    setActive(key)
+    if (key === 'home') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else if (key === 'links') {
+      setTimeout(() => document.getElementById('relevant-links')?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 0)
+    }
+  }
+
   return (
     <div className="dash">
       {disclaimerOpen && <DisclaimerModal onContinue={() => setDisclaimerOpen(false)} />}
@@ -123,7 +134,7 @@ export default function CaseDashboard() {
               <li key={item.key}>
                 <button
                   className={active === item.key ? 'active' : ''}
-                  onClick={() => setActive(item.key)}
+                  onClick={() => selectNav(item.key)}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   {item.label}
@@ -250,8 +261,8 @@ export default function CaseDashboard() {
                           <p className="small muted">{summary}</p>
                         ) : intakeAnswers ? (
                           <p className="small muted">
-                            Summary generated from your intake answers. Lorem ipsum dolor sit amet, consectetur
-                            adipiscing elit — verify every detail against your own records before relying on it.
+                            Summary generated from your intake answers — verify every detail against your own
+                            records before relying on it.
                           </p>
                         ) : (
                           <p className="small muted">Complete the intake questionnaire to generate a case summary.</p>
@@ -371,7 +382,7 @@ export default function CaseDashboard() {
                     </div>
                   </section>
 
-                  <section className="card">
+                  <section className="card" id="relevant-links">
                     <div className="card-head">
                       <h2>Relevant links</h2>
                     </div>

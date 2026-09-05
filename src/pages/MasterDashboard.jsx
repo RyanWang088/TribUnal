@@ -9,13 +9,14 @@ import SuperCaseForm from '../components/SuperCaseForm.jsx'
 const stageLabel = (id) => stages[id]?.label ?? 'Unknown'
 
 export default function MasterDashboard() {
-  const { user, isSuper, logout, cases, addCase, updateCase, removeCase } = useCase()
+  const { user, isSuper, logout, cases, updateCase, removeCase } = useCase()
   const navigate = useNavigate()
   const [editingId, setEditingId] = useState(null)
 
+  // The case file is only created once intake is saved, so abandoning the
+  // form leaves nothing behind.
   function handleAddCase() {
-    const id = addCase()
-    navigate(`/intake?case=${id}`)
+    navigate('/intake')
   }
 
   const calendarItems = useMemo(
