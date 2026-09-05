@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
 import { stages, simulatedUpdates } from '../data/caseEvents.js'
-import { NOT_SURE } from '../data/questions.js'
+import { openQuestions, NOT_SURE } from '../data/questions.js'
 import Timeline from '../components/Timeline.jsx'
 import DisclaimerModal from '../components/DisclaimerModal.jsx'
 import RealityCheck from './RealityCheck.jsx'
@@ -44,9 +44,10 @@ export default function CaseDashboard() {
   const { events, intakeAnswers, ref, title, claimType, respondent, amount } = caseData
   const currentStage = events.reduce((max, ev) => Math.max(max, ev.stage), 0)
   const correspondence = events.filter((ev) => ev.type === 'court' || ev.type === 'respondent')
-  const answered = intakeAnswers ? Object.keys(intakeAnswers).length : 0
+  const questionIds = openQuestions.map((q) => q.id)
+  const answered = intakeAnswers ? questionIds.filter((id) => intakeAnswers[id] !== undefined).length : 0
   const unknownCount = intakeAnswers
-    ? Object.values(intakeAnswers).filter((v) => v === NOT_SURE).length
+    ? questionIds.filter((id) => intakeAnswers[id] === NOT_SURE).length
     : 0
   const confirmedCount = answered - unknownCount
 

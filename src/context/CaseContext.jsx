@@ -13,6 +13,10 @@ const ACCOUNTS_KEY = 'tribunal.accounts'
 const SESSION_KEY = 'tribunal.session'
 const CASES_KEY = 'tribunal.cases'
 
+// Built-in account that always works, even on a fresh browser with no
+// localStorage accounts. Prototype only — this is visible in source.
+const MASTER_ACCOUNT = { username: 'rwks1688@gmail.com', password: 'Ryan2109', name: 'Ryan' }
+
 function loadAccounts() {
   try {
     return JSON.parse(localStorage.getItem(ACCOUNTS_KEY)) ?? {}
@@ -32,6 +36,7 @@ function loadSessionUser() {
   try {
     const key = localStorage.getItem(SESSION_KEY)
     if (!key) return null
+    if (key === MASTER_ACCOUNT.username) return { name: MASTER_ACCOUNT.name }
     const account = loadAccounts()[key]
     return account ? { name: account.name } : null
   } catch {
@@ -65,7 +70,7 @@ export function CaseProvider({ children }) {
       signUp: (username, password, name) => {
         const key = username.trim().toLowerCase()
         const accounts = loadAccounts()
-        if (accounts[key]) {
+        if (accounts[key] || key === MASTER_ACCOUNT.username) {
           setAuthError('That username is already taken. Try logging in instead.')
           return false
         }
@@ -78,6 +83,12 @@ export function CaseProvider({ children }) {
       },
       login: (username, password) => {
         const key = username.trim().toLowerCase()
+        if (key === MASTER_ACCOUNT.username && password === MASTER_ACCOUNT.password) {
+          localStorage.setItem(SESSION_KEY, key)
+          setAuthError('')
+          setUser({ name: MASTER_ACCOUNT.name })
+          return true
+        }
         const accounts = loadAccounts()
         const account = accounts[key]
         if (!account || account.password !== password) {

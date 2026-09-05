@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { mcqQuestions, openQuestions } from '../data/questions.js'
+import { openQuestions } from '../data/questions.js'
 
 const VERDICT_META = {
   confirmed: { icon: '🟢', label: 'Confirmed', className: 'verdict-confirmed' },
@@ -7,7 +7,7 @@ const VERDICT_META = {
   unsupported: { icon: '🔴', label: 'Unsupported', className: 'verdict-unsupported' },
 }
 
-const allQuestions = [...mcqQuestions, ...openQuestions]
+const allQuestions = openQuestions
 
 // Turns the case's confirmed facts into a plain-language object the model
 // is asked to treat as ground truth. Nothing here is generated — it is

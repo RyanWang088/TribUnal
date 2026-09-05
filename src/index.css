@@ -343,6 +343,28 @@ a {
   outline: 2px solid var(--blue);
   outline-offset: 1px;
 }
+.upload-field {
+  margin-top: 0.6rem;
+}
+.btn-upload {
+  display: inline-flex;
+  cursor: pointer;
+}
+.upload-list {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.upload-list li {
+  font-size: 0.85rem;
+  color: var(--muted);
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-alt, #f6f7f9);
+}
 .form-actions {
   display: flex;
   justify-content: flex-end;
