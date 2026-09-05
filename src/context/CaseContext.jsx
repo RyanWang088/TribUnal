@@ -148,13 +148,17 @@ export function CaseProvider({ children }) {
         setCases((prev) => [...prev, newCase])
         return id
       },
-      saveIntake: (caseId, answers) => {
+      removeCase: (caseId) => setCases((prev) => prev.filter((c) => c.id !== caseId)),
+      saveIntake: (caseId, answers, eligibility) => {
         setCases((prev) =>
           prev.map((c) =>
             c.id === caseId
               ? {
                   ...c,
                   intakeAnswers: answers,
+                  eligibility: eligibility?.answers ?? c.eligibility ?? null,
+                  amount: eligibility?.amount ?? c.amount,
+                  claimType: eligibility?.claimType ?? c.claimType,
                   events: [
                     ...c.events,
                     {

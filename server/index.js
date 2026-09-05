@@ -1,25 +1,32 @@
 // Minimal backend for the Reality Check feature. Its only job is to hold
-// the Anthropic API key server-side and forward one request type. Nothing
+// the OpenRouter API key server-side and forward one request type. Nothing
 // else in TribUnal needs a backend yet — this exists purely so the key
 // never ships inside the browser bundle.
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
+
+dotenv.config({ path: new URL('.env', import.meta.url) })
 
 const PORT = process.env.PORT || 8787
-const apiKey = process.env.ANTHROPIC_API_KEY
+const apiKey = process.env.OPENROUTER_API_KEY
+const MODEL = process.env.OPENROUTER_MODEL || 'anthropic/claude-sonnet-5'
 
 const app = express()
 app.use(cors())
 app.use(express.json({ limit: '1mb' }))
 
-const anthropic = apiKey ? new Anthropic({ apiKey }) : null
+// OpenRouter exposes an OpenAI-compatible API, so the same SDK works —
+// it just needs to be pointed at OpenRouter's base URL.
+const openai = apiKey
+  ? new OpenAI({ apiKey, baseURL: 'https://openrouter.ai/api/v1' })
+  : null
 
 const REALITY_CHECK_TOOL = {
   name: 'report_reality_check',
   description: 'Report the fact-check and bias review of a claimant\'s draft statement.',
-  input_schema: {
+  parameters: {
     type: 'object',
     properties: {
       claims: {
@@ -80,9 +87,9 @@ Never invent case law, statistics, or legal authorities yourself. Always call th
 tool with your findings — never reply in plain text.`
 
 app.post('/api/reality-check', async (req, res) => {
-  if (!anthropic) {
+  if (!openai) {
     return res.status(503).json({
-      error: 'ANTHROPIC_API_KEY is not set. Add it to server/.env (see server/.env.example) and restart the server.',
+      error: 'OPENROUTER_API_KEY is not set. Add it to server/.env (see server/.env.example) and restart the server.',
     })
   }
 
@@ -92,25 +99,22 @@ app.post('/api/reality-check', async (req, res) => {
   }
 
   try {
-    const message = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
+    const completion = await openai.chat.completions.create({
+      model: MODEL,
       max_tokens: 2000,
-      system: SYSTEM_PROMPT,
-      tools: [REALITY_CHECK_TOOL],
-      tool_choice: { type: 'tool', name: 'report_reality_check' },
+      tools: [{ type: 'function', function: REALITY_CHECK_TOOL }],
+      tool_choice: { type: 'function', function: { name: 'report_reality_check' } },
       messages: [
-        {
-          role: 'user',
-          content: JSON.stringify({ sourceFacts: sourceFacts ?? {}, draft }),
-        },
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: JSON.stringify({ sourceFacts: sourceFacts ?? {}, draft }) },
       ],
     })
 
-    const toolUse = message.content.find((block) => block.type === 'tool_use')
-    if (!toolUse) {
+    const toolCall = completion.choices[0]?.message?.tool_calls?.[0]
+    if (!toolCall) {
       return res.status(502).json({ error: 'The model did not return a structured result. Try again.' })
     }
-    res.json(toolUse.input)
+    res.json(JSON.parse(toolCall.function.arguments))
   } catch (err) {
     console.error('Reality check request failed:', err)
     res.status(502).json({ error: 'Could not reach the model. Check the server logs and your API key.' })
@@ -120,6 +124,6 @@ app.post('/api/reality-check', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`TribUnal Reality Check server listening on http://localhost:${PORT}`)
   if (!apiKey) {
-    console.warn('ANTHROPIC_API_KEY is not set — /api/reality-check will return 503 until it is.')
+    console.warn('OPENROUTER_API_KEY is not set — /api/reality-check will return 503 until it is.')
   }
 })

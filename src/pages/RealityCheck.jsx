@@ -27,7 +27,7 @@ function buildSourceFacts(caseData) {
 
 // Reality Check sends the claimant's confirmed facts and a draft statement
 // (their own writing, or something a separate AI assistant produced) to a
-// small backend, which asks Claude to flag anything unsupported or
+// small backend, which asks the model to flag anything unsupported or
 // one-sided. See server/index.js for the actual model call — the API key
 // never reaches the browser.
 export default function RealityCheck({ caseData }) {
