@@ -1,6 +1,4 @@
 // Intake questions. Non-leading, open-ended only — no MCQ.
-export const NOT_SURE = "I'm not sure"
-
 export const openQuestions = [
   {
     id: 'open-1',

@@ -1,14 +1,17 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
 import { stages } from '../data/caseEvents.js'
 import CaseCalendar from '../components/CaseCalendar.jsx'
+import SuperBadge from '../components/SuperBadge.jsx'
+import SuperCaseForm from '../components/SuperCaseForm.jsx'
 
 const stageLabel = (id) => stages[id]?.label ?? 'Unknown'
 
 export default function MasterDashboard() {
-  const { user, logout, cases, addCase } = useCase()
+  const { user, isSuper, logout, cases, addCase, updateCase, removeCase } = useCase()
   const navigate = useNavigate()
+  const [editingId, setEditingId] = useState(null)
 
   function handleAddCase() {
     const id = addCase()
@@ -42,6 +45,7 @@ export default function MasterDashboard() {
           <span className="topbar-sub">Self-Represented Person Portal</span>
         </div>
         <div className="topbar-right">
+          <SuperBadge />
           <span className="topbar-user">{user.name}</span>
           <button className="btn btn-ghost" onClick={handleLogout}>
             Log out
@@ -101,22 +105,47 @@ export default function MasterDashboard() {
           <div className="case-cards">
             {cases.map((c) => {
               const currentStage = c.events.reduce((max, ev) => Math.max(max, ev.stage), 0)
+              if (editingId === c.id) {
+                return (
+                  <div key={c.id} className="case-card case-card-editing">
+                    <SuperCaseForm
+                      caseData={c}
+                      onSave={(patch) => {
+                        updateCase(c.id, patch)
+                        setEditingId(null)
+                      }}
+                      onCancel={() => setEditingId(null)}
+                      onDelete={() => {
+                        removeCase(c.id)
+                        setEditingId(null)
+                      }}
+                    />
+                  </div>
+                )
+              }
               return (
-                <button key={c.id} className="case-card" onClick={() => navigate(`/case/${c.id}`)}>
-                  <div className="case-card-top">
-                    <span className="case-card-ref">{c.ref}</span>
-                    <span className="pill pill-stage">
-                      Stage {currentStage} · {stageLabel(currentStage)}
-                    </span>
-                  </div>
-                  <h3>{c.title}</h3>
-                  <p className="muted small">{c.claimType}</p>
-                  <div className="case-card-meta">
-                    <span>Respondent: {c.respondent}</span>
-                    <span>Amount: S${c.amount.toLocaleString()}</span>
-                  </div>
-                  {!c.intakeAnswers && <span className="pill pill-respondent">Intake not started</span>}
-                </button>
+                <div key={c.id} className="case-card-wrap">
+                  <button className="case-card" onClick={() => navigate(`/case/${c.id}`)}>
+                    <div className="case-card-top">
+                      <span className="case-card-ref">{c.ref}</span>
+                      <span className="pill pill-stage">
+                        Stage {currentStage} · {stageLabel(currentStage)}
+                      </span>
+                    </div>
+                    <h3>{c.title}</h3>
+                    <p className="muted small">{c.claimType}</p>
+                    <div className="case-card-meta">
+                      <span>Respondent: {c.respondent}</span>
+                      <span>Amount: S${c.amount.toLocaleString()}</span>
+                    </div>
+                    {!c.intakeAnswers && <span className="pill pill-respondent">Intake not started</span>}
+                  </button>
+                  {isSuper && (
+                    <button type="button" className="btn btn-outline btn-sm super-edit-btn" onClick={() => setEditingId(c.id)}>
+                      Edit
+                    </button>
+                  )}
+                </div>
               )
             })}
           </div>

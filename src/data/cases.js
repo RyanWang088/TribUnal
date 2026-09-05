@@ -88,11 +88,11 @@ export const seedCases = [
       'mcq-2': 'Sed do eiusmod tempor',
       'mcq-3': 'Ut labore et dolore magna',
       'mcq-4': 'Consectetur adipiscing elit',
-      'mcq-5': "I'm not sure",
+      'mcq-5': 'Sed do eiusmod tempor',
       'open-1': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
       'open-2': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
       'open-3': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
-      'open-4': "I'm not sure",
+      'open-4': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
       'open-5': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit.',
     },
     events: [

@@ -1,14 +1,16 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
-import { openQuestions, NOT_SURE } from '../data/questions.js'
+import { openQuestions } from '../data/questions.js'
 import { eligibilityQuestions, evaluateEligibility } from '../data/eligibility.js'
 import EligibilityCheck from '../components/EligibilityCheck.jsx'
 
-// Step 1: SCT eligibility screen. Any ❌ ends the intake and returns the
-// claimant to the dashboard. Step 2: the open-ended questions.
+// Step 1: SCT eligibility screen. Answers are evaluated silently; a failing
+// answer ends the intake and returns the claimant to the dashboard. No
+// per-answer verdicts are shown so the questions cannot lead the claimant.
+// Step 2: the open-ended questions.
 export default function Intake() {
-  const { user, cases, getCase, saveIntake, removeCase } = useCase()
+  const { cases, getCase, saveIntake, removeCase } = useCase()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const caseId = searchParams.get('case') || cases[0]?.id
@@ -31,11 +33,20 @@ export default function Intake() {
     setAnswers((prev) => ({ ...prev, [id]: value }))
   }
 
+  // Names are read before setFiles: the updater runs after the input is
+  // reset, at which point the FileList is already empty.
   const addFiles = (id, fileList) => {
-    setFiles((prev) => ({
-      ...prev,
-      [id]: [...(prev[id] ?? []), ...Array.from(fileList).map((f) => f.name)],
-    }))
+    const names = Array.from(fileList, (f) => f.name)
+    if (!names.length) return
+    setFiles((prev) => ({ ...prev, [id]: [...(prev[id] ?? []), ...names] }))
+  }
+
+  const removeFile = (id, index) => {
+    setFiles((prev) => {
+      const next = prev[id].filter((_, i) => i !== index)
+      const { [id]: _removed, ...rest } = prev
+      return next.length ? { ...rest, [id]: next } : rest
+    })
   }
 
   function continueToStep2() {
@@ -62,7 +73,7 @@ export default function Intake() {
   function submit(e) {
     e.preventDefault()
     if (!openComplete) {
-      setError('Please answer every question. Type "I\'m not sure" if you don\'t know.')
+      setError('Please answer every question.')
       return
     }
     const subject = eligibilityQuestions
@@ -86,10 +97,9 @@ export default function Intake() {
           <div className="eyebrow">Step {step + 1} of 2 · {step === 0 ? 'SCT eligibility' : 'Intake'}</div>
           <h1>Why do you want to file a Small Claims Tribunals claim?</h1>
           <p>
-            Hello {user.name}.{' '}
             {step === 0
               ? 'First, a few quick checks to confirm the Small Claims Tribunals can hear your claim.'
-              : "Answer these questions as factually as you can. If you don't know something, say so. We record that as unknown rather than guessing."}
+              : 'Answer these questions as factually as possible.'}
           </p>
         </div>
         <ol className="stepper">
@@ -102,11 +112,8 @@ export default function Intake() {
         {step === 0 && (
           <section className="qa-section">
             <h2>SCT Eligibility Questionnaire</h2>
-            <p className="muted">
-              Based on the Small Claims Tribunals Act 1984 and related legislation. ✅ eligible · ⚠️ eligible
-              with a condition · ❌ not eligible.
-            </p>
-            <EligibilityCheck answers={eligibility} evaluation={evaluation} onChange={setEligibilityAnswer} />
+            <p className="muted">Based on the Small Claims Tribunals Act 1984 and related legislation.</p>
+            <EligibilityCheck answers={eligibility} onChange={setEligibilityAnswer} />
             {error && <div className="form-error">{error}</div>}
             <div className="form-actions">
               <button type="button" className="btn btn-primary" onClick={continueToStep2}>
@@ -119,10 +126,7 @@ export default function Intake() {
         {step === 1 && (
           <section className="qa-section">
             <h2>In your own words</h2>
-            <p className="muted">
-              These questions are deliberately neutral. Describe what happened, not what you think it
-              means legally.
-            </p>
+            <p className="muted">Describe what happened. These questions are deliberately neutral.</p>
             {openQuestions.map((q, i) => (
               <div key={q.id} className="question">
                 <label htmlFor={q.id}>
@@ -153,15 +157,22 @@ export default function Intake() {
                     {(files[q.id]?.length ?? 0) > 0 && (
                       <ul className="upload-list">
                         {files[q.id].map((name, idx) => (
-                          <li key={`${name}-${idx}`}>{name}</li>
+                          <li key={`${name}-${idx}`}>
+                            <span className="upload-name">{name}</span>
+                            <button
+                              type="button"
+                              className="upload-remove"
+                              aria-label={`Remove ${name}`}
+                              onClick={() => removeFile(q.id, idx)}
+                            >
+                              ×
+                            </button>
+                          </li>
                         ))}
                       </ul>
                     )}
                   </div>
                 )}
-                <button type="button" className="btn btn-link" onClick={() => setAnswer(q.id, NOT_SURE)}>
-                  I&apos;m not sure
-                </button>
               </div>
             ))}
             {error && <div className="form-error">{error}</div>}

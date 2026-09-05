@@ -2,10 +2,14 @@ import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
 import { stages, simulatedUpdates } from '../data/caseEvents.js'
-import { openQuestions, NOT_SURE } from '../data/questions.js'
+import { openQuestions } from '../data/questions.js'
 import Timeline from '../components/Timeline.jsx'
 import DisclaimerModal from '../components/DisclaimerModal.jsx'
+import SuperBadge from '../components/SuperBadge.jsx'
+import SuperEventForm from '../components/SuperEventForm.jsx'
+import SuperCaseForm from '../components/SuperCaseForm.jsx'
 import RealityCheck from './RealityCheck.jsx'
+import CaseSummary from './CaseSummary.jsx'
 
 const navItems = [
   { key: 'home', label: 'Home', icon: '⌂' },
@@ -13,7 +17,7 @@ const navItems = [
   { key: 'timeline', label: 'Timeline', icon: '◷' },
   { key: 'evidence', label: 'Evidence Map', icon: '◈' },
   { key: 'reality', label: 'Reality Check', icon: '⚑' },
-  { key: 'readiness', label: 'SCT Readiness', icon: '✓' },
+  { key: 'summary', label: 'Case summary', icon: '≡' },
   { key: 'links', label: 'Relevant Links', icon: '¶' },
 ]
 
@@ -32,29 +36,58 @@ const nextStepByStage = {
 // It is deliberately not remembered across mounts.
 export default function CaseDashboard() {
   const { caseId } = useParams()
-  const { user, logout, getCase, addEvent } = useCase()
+  const { user, isSuper, logout, getCase, addEvent, updateEvent, removeEvent, updateCase } = useCase()
   const navigate = useNavigate()
   const [active, setActive] = useState('home')
   const [used, setUsed] = useState([])
   const [disclaimerOpen, setDisclaimerOpen] = useState(true)
+  // Super-only editor state: which timeline event is open, whether the
+  // "add event" form is showing, and which side panel is being edited.
+  const [editingEventId, setEditingEventId] = useState(null)
+  const [addingEvent, setAddingEvent] = useState(false)
+  const [editingPanel, setEditingPanel] = useState(null)
+  const [healthDraft, setHealthDraft] = useState(null)
 
   const caseData = getCase(caseId)
   if (!caseData) return <Navigate to="/dashboard" replace />
 
-  const { events, intakeAnswers, ref, title, claimType, respondent, amount } = caseData
+  const { events, intakeAnswers, ref, title, claimType, respondent, amount, summary, healthOverride } = caseData
   const currentStage = events.reduce((max, ev) => Math.max(max, ev.stage), 0)
   const correspondence = events.filter((ev) => ev.type === 'court' || ev.type === 'respondent')
   const questionIds = openQuestions.map((q) => q.id)
-  const answered = intakeAnswers ? questionIds.filter((id) => intakeAnswers[id] !== undefined).length : 0
-  const unknownCount = intakeAnswers
-    ? questionIds.filter((id) => intakeAnswers[id] === NOT_SURE).length
-    : 0
-  const confirmedCount = answered - unknownCount
+  const derivedAnswered = intakeAnswers ? questionIds.filter((id) => intakeAnswers[id] !== undefined).length : 0
+  const answered = healthOverride?.answered ?? derivedAnswered
 
   function simulate(update) {
     addEvent(caseId, update.event)
     setUsed((prev) => [...prev, update.key])
   }
+
+  function openHealthEditor() {
+    setHealthDraft({ answered })
+    setEditingPanel('health')
+  }
+
+  function saveHealth(e) {
+    e.preventDefault()
+    updateCase(caseId, { healthOverride: { answered: Number(healthDraft.answered) || 0 } })
+    setEditingPanel(null)
+  }
+
+  const eventEditor = (ev) => (
+    <SuperEventForm
+      initial={ev}
+      onSave={(patch) => {
+        updateEvent(caseId, ev.id, patch)
+        setEditingEventId(null)
+      }}
+      onCancel={() => setEditingEventId(null)}
+      onDelete={() => {
+        removeEvent(caseId, ev.id)
+        setEditingEventId(null)
+      }}
+    />
+  )
 
   function handleLogout() {
     logout()
@@ -72,6 +105,7 @@ export default function CaseDashboard() {
           <span className="topbar-sub">Self-Represented Person Portal</span>
         </div>
         <div className="topbar-right">
+          <SuperBadge />
           <span className="topbar-user">{user.name}</span>
           <button className="btn btn-ghost" onClick={handleLogout}>
             Log out
@@ -107,7 +141,9 @@ export default function CaseDashboard() {
         <main className="content">
           <div className="content-head on-bg">
             <div>
-              <div className="eyebrow">{active === 'reality' ? 'Reality Check' : 'Home'}</div>
+              <div className="eyebrow">
+                {active === 'reality' ? 'Reality Check' : active === 'summary' ? 'Case summary' : 'Home'}
+              </div>
               <h1>{title}</h1>
               <p>Welcome back, {user.name}.</p>
             </div>
@@ -118,6 +154,8 @@ export default function CaseDashboard() {
 
           {active === 'reality' ? (
             <RealityCheck caseData={caseData} />
+          ) : active === 'summary' ? (
+            <CaseSummary caseData={caseData} />
           ) : (
             <>
               <section className="card stage-card">
@@ -145,44 +183,94 @@ export default function CaseDashboard() {
                 <section className="card col-main">
                   <div className="card-head">
                     <h2>Case timeline</h2>
-                    <span className="muted">{events.length} events</span>
+                    <span className="card-head-right">
+                      <span className="muted">{events.length} events</span>
+                      {isSuper && !addingEvent && (
+                        <button type="button" className="btn btn-outline btn-sm" onClick={() => setAddingEvent(true)}>
+                          + Add event
+                        </button>
+                      )}
+                    </span>
                   </div>
-                  <Timeline events={events} />
+                  {addingEvent && (
+                    <div className="super-add-event">
+                      <SuperEventForm
+                        onSave={(ev) => {
+                          addEvent(caseId, ev)
+                          setAddingEvent(false)
+                        }}
+                        onCancel={() => setAddingEvent(false)}
+                      />
+                    </div>
+                  )}
+                  <Timeline
+                    events={events}
+                    onEdit={isSuper ? (ev) => setEditingEventId(ev.id) : undefined}
+                    editingId={editingEventId}
+                    renderEditor={eventEditor}
+                  />
                 </section>
 
                 <div className="col-side">
                   <section className="card">
                     <div className="card-head">
                       <h2>Relevant summaries</h2>
+                      {isSuper && editingPanel !== 'summary' && (
+                        <button type="button" className="btn-link" onClick={() => setEditingPanel('summary')}>
+                          Edit
+                        </button>
+                      )}
                     </div>
-                    <ul className="summary-list">
-                      <li>
-                        <span className="muted">Claim type</span>
-                        <span>{claimType}</span>
-                      </li>
-                      <li>
-                        <span className="muted">Respondent</span>
-                        <span>{respondent}</span>
-                      </li>
-                      <li>
-                        <span className="muted">Amount claimed</span>
-                        <span>S${amount.toLocaleString()}</span>
-                      </li>
-                    </ul>
-                    {intakeAnswers ? (
-                      <p className="small muted">
-                        Summary generated from your intake answers. Lorem ipsum dolor sit amet, consectetur
-                        adipiscing elit — verify every detail against your own records before relying on it.
-                      </p>
+                    {editingPanel === 'summary' ? (
+                      <SuperCaseForm
+                        caseData={caseData}
+                        onSave={(patch) => {
+                          updateCase(caseId, patch)
+                          setEditingPanel(null)
+                        }}
+                        onCancel={() => setEditingPanel(null)}
+                      />
                     ) : (
-                      <p className="small muted">Complete the intake questionnaire to generate a case summary.</p>
+                      <>
+                        <ul className="summary-list">
+                          <li>
+                            <span className="muted">Claim type</span>
+                            <span>{claimType}</span>
+                          </li>
+                          <li>
+                            <span className="muted">Respondent</span>
+                            <span>{respondent}</span>
+                          </li>
+                          <li>
+                            <span className="muted">Amount claimed</span>
+                            <span>S${amount.toLocaleString()}</span>
+                          </li>
+                        </ul>
+                        {summary ? (
+                          <p className="small muted">{summary}</p>
+                        ) : intakeAnswers ? (
+                          <p className="small muted">
+                            Summary generated from your intake answers. Lorem ipsum dolor sit amet, consectetur
+                            adipiscing elit — verify every detail against your own records before relying on it.
+                          </p>
+                        ) : (
+                          <p className="small muted">Complete the intake questionnaire to generate a case summary.</p>
+                        )}
+                      </>
                     )}
                   </section>
 
                   <section className="card">
                     <div className="card-head">
                       <h2>Correspondence</h2>
-                      <span className="badge">{correspondence.length}</span>
+                      <span className="card-head-right">
+                        {isSuper && (
+                          <button type="button" className="btn-link" onClick={() => setAddingEvent(true)}>
+                            + Add
+                          </button>
+                        )}
+                        <span className="badge">{correspondence.length}</span>
+                      </span>
                     </div>
                     {correspondence.length === 0 ? (
                       <p className="muted">No correspondence from the court or respondent yet.</p>
@@ -193,7 +281,12 @@ export default function CaseDashboard() {
                             <span className={`pill pill-${ev.type}`}>
                               {ev.type === 'court' ? 'Court' : 'Respondent'}
                             </span>
-                            <span>{ev.title}</span>
+                            <span className="grow">{ev.title}</span>
+                            {isSuper && (
+                              <button type="button" className="btn-link" onClick={() => setEditingEventId(ev.id)}>
+                                Edit
+                              </button>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -203,21 +296,57 @@ export default function CaseDashboard() {
                   <section className="card">
                     <div className="card-head">
                       <h2>Case health</h2>
+                      {isSuper && editingPanel !== 'health' && (
+                        <button type="button" className="btn-link" onClick={openHealthEditor}>
+                          Edit
+                        </button>
+                      )}
                     </div>
-                    <ul className="stat-list">
-                      <li>
-                        <span>Intake questions answered</span>
-                        <strong>{answered} / 10</strong>
-                      </li>
-                      <li>
-                        <span>Confirmed answers</span>
-                        <strong className="ok">{confirmedCount}</strong>
-                      </li>
-                      <li>
-                        <span>Marked "I'm not sure"</span>
-                        <strong className="warn">{unknownCount}</strong>
-                      </li>
-                    </ul>
+                    {editingPanel === 'health' ? (
+                      <form className="super-form" onSubmit={saveHealth}>
+                        <div className="super-form-row">
+                          <label>
+                            Answered
+                            <input
+                              type="number"
+                              min="0"
+                              max="10"
+                              value={healthDraft.answered}
+                              onChange={(e) => setHealthDraft((d) => ({ ...d, answered: e.target.value }))}
+                            />
+                          </label>
+                        </div>
+                        <div className="super-actions">
+                          <button type="submit" className="btn btn-primary btn-sm">
+                            Save
+                          </button>
+                          <button type="button" className="btn btn-outline btn-sm" onClick={() => setEditingPanel(null)}>
+                            Cancel
+                          </button>
+                          {healthOverride && (
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm btn-danger"
+                              onClick={() => {
+                                updateCase(caseId, { healthOverride: null })
+                                setEditingPanel(null)
+                              }}
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      </form>
+                    ) : (
+                      <ul className="stat-list">
+                        <li>
+                          <span>Intake questions answered</span>
+                          <strong className={answered === questionIds.length ? 'ok' : ''}>
+                            {answered} / {questionIds.length}
+                          </strong>
+                        </li>
+                      </ul>
+                    )}
                   </section>
 
                   <section className="card sim-card">
@@ -233,7 +362,7 @@ export default function CaseDashboard() {
                         <button
                           key={u.key}
                           className="btn btn-outline btn-sm"
-                          disabled={used.includes(u.key)}
+                          disabled={!isSuper && used.includes(u.key)}
                           onClick={() => simulate(u)}
                         >
                           {u.label}

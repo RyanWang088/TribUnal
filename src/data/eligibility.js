@@ -14,10 +14,10 @@ export const eligibilityQuestions = [
   },
   {
     id: 'date',
-    type: 'text',
+    type: 'date',
     text: 'On what date did the problem happen?',
     hint: 'The date of purchase, non-delivery, non-payment or damage.',
-    placeholder: 'e.g. 14/03/2025',
+    placeholder: 'Select a date',
     ref: 's 5(3)(b)',
   },
   {

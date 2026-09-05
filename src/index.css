@@ -367,33 +367,161 @@ a {
 .option-label {
   flex: 1;
 }
-.option-status {
-  flex-shrink: 0;
-}
-.elig-note {
-  margin: 0.6rem 0 0;
-  padding: 0.5rem 0.8rem;
-  border-radius: 8px;
-  font-size: 0.88rem;
-}
-.elig-ok {
-  background: #e8f6ee;
-  color: #1f6b3f;
-}
-.elig-warn {
-  background: #fff8e6;
-  color: #8a5a00;
-}
-.elig-fail {
-  background: #fdecea;
-  color: var(--bad);
-}
 .elig-ref {
   margin: 0.5rem 0 0;
   font-size: 0.75rem;
   color: var(--muted);
   font-style: italic;
 }
+/* Date picker */
+.datepicker {
+  position: relative;
+  clear: both;
+  max-width: 360px;
+}
+.datepicker-input {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font: inherit;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.datepicker-input.placeholder {
+  color: var(--muted);
+}
+.datepicker-input:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+.datepicker-icon {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.datepicker-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 20;
+  width: 300px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(16, 24, 40, 0.18);
+  padding: 0.75rem;
+}
+.datepicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.datepicker-nav {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 1.1rem;
+  color: var(--navy);
+}
+.datepicker-nav:hover:not(:disabled) {
+  background: var(--blue-soft);
+}
+.datepicker-nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.datepicker-title {
+  font: inherit;
+  font-weight: 600;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  cursor: pointer;
+  color: var(--navy);
+}
+.datepicker-title:hover {
+  background: var(--blue-soft);
+}
+.datepicker-title.static {
+  cursor: default;
+}
+.datepicker-title.static:hover {
+  background: none;
+}
+.datepicker-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+.datepicker-weekday {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--muted);
+  padding-bottom: 0.25rem;
+}
+.datepicker-day {
+  aspect-ratio: 1;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  color: var(--text);
+}
+.datepicker-day:hover:not(:disabled) {
+  background: var(--blue-soft);
+}
+.datepicker-day:disabled {
+  color: var(--border);
+  cursor: not-allowed;
+}
+.datepicker-day.today {
+  box-shadow: inset 0 0 0 1px var(--gold);
+}
+.datepicker-day.selected {
+  background: var(--navy);
+  color: #fff;
+}
+.datepicker-years {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+.datepicker-year {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.55rem 0;
+  cursor: pointer;
+  color: var(--text);
+}
+.datepicker-year:hover:not(:disabled) {
+  background: var(--blue-soft);
+}
+.datepicker-year:disabled {
+  color: var(--border);
+  cursor: not-allowed;
+}
+.datepicker-year.selected {
+  background: var(--navy);
+  border-color: var(--navy);
+  color: #fff;
+}
+
 .upload-field {
   margin-top: 0.6rem;
 }
@@ -409,12 +537,35 @@ a {
   gap: 0.3rem;
 }
 .upload-list li {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.85rem;
-  color: var(--muted);
-  padding: 0.3rem 0.6rem;
+  color: var(--text);
+  padding: 0.3rem 0.3rem 0.3rem 0.6rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-alt, #f6f7f9);
+}
+.upload-name {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.upload-remove {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.upload-remove:hover {
+  background: #fdecea;
+  color: var(--bad);
 }
 .form-actions {
   display: flex;
@@ -527,7 +678,8 @@ a {
 .content {
   flex: 1;
   padding: 1.75rem 2rem 3rem;
-  max-width: 1200px;
+  width: 100%;
+  min-width: 0;
 }
 .content-head {
   display: flex;
@@ -798,7 +950,7 @@ a {
 
 /* ---------- Master dashboard ---------- */
 .content-master {
-  max-width: 1200px;
+  width: 100%;
 }
 .content-master .content-head {
   align-items: flex-start;
@@ -1080,6 +1232,216 @@ a {
 }
 .verdict-unsupported {
   border-left-color: var(--bad);
+}
+
+/* ---------- Case summary ---------- */
+.summary-list-idx {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.6rem;
+}
+.summary-item {
+  display: flex;
+  gap: 0.7rem;
+  align-items: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.7rem 0.9rem;
+}
+.summary-item p {
+  margin: 0.2rem 0 0;
+}
+.summary-item-title {
+  font-weight: 600;
+  line-height: 1.4;
+}
+.idx {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 22px;
+  padding: 0 0.4rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+  background: var(--bg);
+  color: var(--muted);
+}
+.summary-item > .idx {
+  margin-top: 1px;
+}
+a.idx {
+  text-decoration: none;
+}
+a.idx:hover {
+  text-decoration: underline;
+  filter: brightness(0.92);
+}
+.summary-item:target {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px #f1dfa8;
+}
+.idx-L {
+  background: #e6e9f2;
+  color: var(--navy);
+}
+.idx-S {
+  background: #e4f4ea;
+  color: var(--ok);
+}
+.idx-W {
+  background: #fdecea;
+  color: var(--bad);
+}
+.idx-link {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+.idx-refs {
+  display: inline-flex;
+  gap: 0.25rem;
+  margin-left: 0.35rem;
+  vertical-align: middle;
+}
+.idx-refs .idx {
+  height: 18px;
+  min-width: 24px;
+  font-size: 0.66rem;
+}
+.summary-disclaimer {
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+/* ---------- Super account (presentation mode) ---------- */
+.super-badge {
+  display: inline-block;
+  background: var(--bad);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #e05d4f;
+  line-height: 1;
+}
+.card-head-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.grow {
+  flex: 1;
+}
+.timeline-edit {
+  margin-left: auto;
+  padding: 0;
+  font-size: 0.78rem;
+}
+.super-add-event {
+  border: 1px dashed var(--bad);
+  border-radius: 8px;
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+}
+.super-form {
+  display: grid;
+  gap: 0.7rem;
+  font-size: 0.88rem;
+}
+.super-form label {
+  display: grid;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.super-form input,
+.super-form select,
+.super-form textarea {
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 400;
+  color: var(--text);
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  width: 100%;
+}
+.super-form textarea {
+  resize: vertical;
+}
+.super-form input:focus,
+.super-form select:focus,
+.super-form textarea:focus {
+  outline: 2px solid var(--blue);
+  outline-offset: 1px;
+}
+.super-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 0.6rem;
+}
+.super-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.2rem;
+}
+.super-actions .btn-danger {
+  margin-left: auto;
+}
+.btn-danger {
+  color: var(--bad);
+  border-color: #f5c2c0;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #fdecea;
+  border-color: var(--bad);
+}
+.super-dates {
+  border-top: 1px dashed var(--border);
+  padding-top: 0.6rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.super-dates-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.super-date-row {
+  grid-template-columns: 130px minmax(0, 1fr) 120px auto;
+  align-items: center;
+}
+.case-card-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.case-card-wrap .case-card {
+  flex: 1;
+}
+.super-edit-btn {
+  align-self: flex-end;
+}
+.case-card-editing {
+  cursor: default;
+  grid-column: 1 / -1;
+}
+.case-card-editing:hover {
+  transform: none;
+  border-color: var(--border);
 }
 
 @media (max-width: 900px) {
