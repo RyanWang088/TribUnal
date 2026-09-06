@@ -4,29 +4,123 @@ import { useCase } from '../context/CaseContext.jsx'
 import { buildCaseFacts } from '../data/caseFacts.js'
 import { deleteDocument, listDocuments, putDocument } from '../data/documentStore.js'
 import { extractText } from '../data/extractText.js'
+import {
+  VERIFICATION_QUESTIONS,
+  documentCitationKey,
+  isVerified,
+  lawCitationKey,
+  verificationCounts,
+} from '../data/citations.js'
 
 const formatChars = (n) => (n >= 1000 ? `${Math.round(n / 1000)}k characters` : `${n} characters`)
 
-// Quotes are checked against the source text server-side, so a citation
-// either matches the document or is shown as needing manual checking.
-function Citations({ items }) {
+// Summaries and bases are point form. Older stored summaries kept them as a
+// single string, so both shapes render.
+function Points({ value, className = 'small' }) {
+  const items = Array.isArray(value) ? value.filter(Boolean) : value ? [value] : []
+  if (items.length === 0) return null
+  return (
+    <ul className={`point-list ${className}`}>
+      {items.map((t, i) => (
+        <li key={i}>{t}</li>
+      ))}
+    </ul>
+  )
+}
+
+// How to actually check a citation, spelled out rather than assumed. The
+// claimant is being asked to attest to something, so they are told what the
+// attestation involves: open the source, find the provision or paragraph,
+// read it. `statuteName` and `citationText` fill the placeholders.
+function VerifySteps({ statuteName, citationText }) {
+  return (
+    <div className="verify-steps">
+      <p className="verify-steps-head">Please check the following:</p>
+      <p className="verify-steps-kind">Statute</p>
+      <ol>
+        <li>
+          Search &ldquo;<span className="verify-token">{statuteName}</span>&rdquo; on your browser
+        </li>
+        <li>Open the statute</li>
+        <li>Locate the section</li>
+      </ol>
+      <p className="verify-steps-kind">Cases:</p>
+      <ol>
+        <li>Open database</li>
+        <li>
+          Paste &ldquo;<span className="verify-token">{citationText}</span>&rdquo; into the database
+        </li>
+        <li>Find open the case</li>
+        <li>Find the paragraph with the corresponding number</li>
+      </ol>
+    </div>
+  )
+}
+
+// The two questions the claimant answers for themselves. Both must be ticked
+// before the citation can leave the app in an export — see data/citations.js.
+function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, statuteName, citationText }) {
+  const verified = isVerified(checks, citationKey)
+  return (
+    <div className={`verify ${verified ? 'verified' : ''}`}>
+      <div className="verify-head">
+        <span className="verify-status">
+          {verified ? '✓ Verified by you — will be included in exports' : 'Not verified'}
+        </span>
+        {href ? (
+          <a className="btn-link" href={href} target="_blank" rel="noreferrer">
+            {openLabel} ↗
+          </a>
+        ) : (
+          <button type="button" className="btn-link" onClick={onOpen}>
+            {openLabel} ↗
+          </button>
+        )}
+      </div>
+      <VerifySteps statuteName={statuteName} citationText={citationText} />
+      {VERIFICATION_QUESTIONS.map((q) => (
+        <label key={q.id} className="verify-q">
+          <input
+            type="checkbox"
+            checked={Boolean(checks?.[citationKey]?.[q.id])}
+            onChange={(e) => onCheck(citationKey, q.id, e.target.checked)}
+          />
+          <span>{q.text}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+// Quotes that did not appear in the document they named have already been
+// deleted server-side, along with any point left unsupported by their
+// removal. What is left still has to be checked by the claimant before it can
+// be exported.
+function Citations({ items, checks, onCheck, onOpenDocument }) {
   if (!items?.length) return null
   return (
     <ul className="citation-list">
-      {items.map((c, i) => (
-        <li key={i} className={`citation ${c.verified ? 'ok' : 'unverified'}`}>
-          <p className="citation-quote">&ldquo;{c.quote}&rdquo;</p>
-          <p className="muted small">
-            {c.documentName}
-            {c.pinpoint && <> · {c.pinpoint}</>} ·{' '}
-            {c.verified ? (
-              <span className="citation-flag ok">✓ found in document</span>
-            ) : (
-              <span className="citation-flag bad">⚠ not found — check this quote yourself</span>
-            )}
-          </p>
-        </li>
-      ))}
+      {items.map((c, i) => {
+        const key = documentCitationKey(c)
+        return (
+          <li key={i} className={`citation ${isVerified(checks, key) ? 'ok' : 'unverified'}`}>
+            <p className="citation-quote">&ldquo;{c.quote}&rdquo;</p>
+            <p className="muted small">
+              {c.documentName}
+              {c.pinpoint && <> · {c.pinpoint}</>}
+            </p>
+            <VerifyGate
+              citationKey={key}
+              checks={checks}
+              onCheck={onCheck}
+              openLabel={`Open ${c.documentName}`}
+              onOpen={() => onOpenDocument(c.document)}
+              statuteName={c.documentName}
+              citationText={c.pinpoint ? `${c.documentName} ${c.pinpoint}` : c.documentName}
+            />
+          </li>
+        )
+      })}
     </ul>
   )
 }
@@ -72,7 +166,7 @@ function Related({ items, lawByIndex }) {
 // read. The result is stored on the case so it survives navigation and
 // logout; Regenerate replaces it. See server/index.js for the model call.
 export default function CaseSummary({ caseData }) {
-  const { updateCase } = useCase()
+  const { updateCase, setCitationCheck } = useCase()
   const navigate = useNavigate()
   const [status, setStatus] = useState('idle') // idle | loading | error
   const [error, setError] = useState('')
@@ -81,6 +175,21 @@ export default function CaseSummary({ caseData }) {
   const [docError, setDocError] = useState('')
 
   const summary = caseData.caseSummary
+  const checks = caseData.citationChecks ?? {}
+  const counts = verificationCounts(summary, checks)
+
+  // Verification has to be done against the source, not from memory, so the
+  // document is opened from here. Documents live in IndexedDB as extracted
+  // text, so the tab shows that text for the claimant to search.
+  async function openDocument(dLabel) {
+    const stored = await listDocuments(caseData.id)
+    const i = Number(String(dLabel).slice(1)) - 1
+    const doc = stored[i]
+    if (!doc) return
+    const url = URL.createObjectURL(new Blob([doc.text], { type: 'text/plain;charset=utf-8' }))
+    window.open(url, '_blank', 'noopener')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
+  }
   const lawByIndex = Object.fromEntries((summary?.law ?? []).map((l) => [l.index, l]))
 
   useEffect(() => {
@@ -240,6 +349,38 @@ export default function CaseSummary({ caseData }) {
         <div className="reality-results summary-results">
           <div className="reality-note">{summary.overallNote}</div>
 
+          {summary.integrity && (
+            <p className="muted small integrity-note">
+              Checked {summary.integrity.citationsChecked} quotation
+              {summary.integrity.citationsChecked === 1 ? '' : 's'} against your documents.
+              {summary.integrity.citationsDeleted > 0 && (
+                <> Deleted {summary.integrity.citationsDeleted} that did not appear in the document named.</>
+              )}
+              {summary.integrity.pointsDeleted > 0 && (
+                <> Removed {summary.integrity.pointsDeleted} point
+                  {summary.integrity.pointsDeleted === 1 ? '' : 's'} left with no citation behind
+                  {summary.integrity.pointsDeleted === 1 ? ' it' : ' them'}.</>
+              )}
+              {summary.integrity.provisionsDeleted > 0 && (
+                <> Dropped {summary.integrity.provisionsDeleted} malformed provision reference
+                  {summary.integrity.provisionsDeleted === 1 ? '' : 's'}.</>
+              )}
+            </p>
+          )}
+
+          {counts.total > 0 && (
+            <div className={`export-gate ${counts.unverified === 0 ? 'ready' : ''}`}>
+              <strong>
+                {counts.verified} of {counts.total} citations verified by you
+              </strong>
+              <p className="small">
+                {counts.unverified === 0
+                  ? 'Every citation has been checked against its source. All of them would be included in an export.'
+                  : `${counts.unverified} citation${counts.unverified === 1 ? '' : 's'} would be stripped from an export. Open each source below and answer both questions before relying on it.`}
+              </p>
+            </div>
+          )}
+
           <h3>Relevant law</h3>
           {summary.law.length === 0 ? (
             <p className="muted small">No specific rules identified.</p>
@@ -252,7 +393,7 @@ export default function CaseSummary({ caseData }) {
                   </a>
                   <div>
                     <div className="summary-item-title">{l.title}</div>
-                    <p className="small">{l.summary}</p>
+                    <Points value={l.summaryPoints ?? l.summary} />
                     {l.relevance && (
                       <p className="small">
                         <strong>Why it matters here:</strong> {l.relevance}
@@ -264,6 +405,15 @@ export default function CaseSummary({ caseData }) {
                       </a>
                       {(l.provisions ?? []).length > 0 && <> · {l.provisions.join(', ')}</>}
                     </p>
+                    <VerifyGate
+                      citationKey={lawCitationKey(l)}
+                      checks={checks}
+                      onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
+                      openLabel="Open on SSO"
+                      href={l.source.url}
+                      statuteName={l.source.label}
+                      citationText={`${l.source.label} ${(l.provisions ?? []).join(', ')}`.trim()}
+                    />
                   </div>
                 </li>
               ))}
@@ -293,8 +443,14 @@ export default function CaseSummary({ caseData }) {
                     <div className="summary-item-title">
                       {s.point} <Related items={s.related} lawByIndex={lawByIndex} />
                     </div>
-                    <p className="muted small">Based on: {s.basis}</p>
-                    <Citations items={s.citations} />
+                    <p className="muted small">Based on:</p>
+                    <Points value={s.basisPoints ?? s.basis} className="muted small" />
+                    <Citations
+                      items={s.citations}
+                      checks={checks}
+                      onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
+                      onOpenDocument={openDocument}
+                    />
                   </div>
                 </li>
               ))}
@@ -313,9 +469,14 @@ export default function CaseSummary({ caseData }) {
                     <div className="summary-item-title">
                       {w.point} <Related items={w.related} lawByIndex={lawByIndex} />
                     </div>
-                    <p className="small">{w.why}</p>
+                    <Points value={w.whyPoints ?? w.why} />
                     <p className="muted small">What would address it: {w.evidenceNeeded}</p>
-                    <Citations items={w.citations} />
+                    <Citations
+                      items={w.citations}
+                      checks={checks}
+                      onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
+                      onOpenDocument={openDocument}
+                    />
                   </div>
                 </li>
               ))}

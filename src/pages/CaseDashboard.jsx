@@ -146,7 +146,8 @@ export default function CaseDashboard() {
       <header className="topbar">
         <div className="topbar-brand">
           <span className="topbar-logo">Trib</span>
-          <span className="topbar-title">Unal</span>
+          <span className="topbar-title">U</span>
+          <span className="topbar-logo">nal</span>
           <span className="topbar-sub">Self-Represented Person Portal</span>
         </div>
         <div className="topbar-right">

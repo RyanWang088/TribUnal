@@ -235,6 +235,21 @@ export function CaseProvider({ children }) {
             c.id === caseId ? { ...c, stageDates: { ...(c.stageDates ?? {}), [stageId]: date } } : c,
           ),
         ),
+      // Records the claimant's own verification of one citation. Keyed by
+      // citation content (see data/citations.js), so a regenerated summary
+      // keeps the ticks for citations that came back word for word and loses
+      // them for anything that changed.
+      setCitationCheck: (caseId, key, questionId, value) =>
+        setCases((prev) =>
+          prev.map((c) => {
+            if (c.id !== caseId) return c
+            const checks = c.citationChecks ?? {}
+            const entry = { ...(checks[key] ?? {}) }
+            if (value) entry[questionId] = new Date().toISOString()
+            else delete entry[questionId]
+            return { ...c, citationChecks: { ...checks, [key]: entry } }
+          }),
+        ),
       removeCase: (caseId) => {
         setCases((prev) => prev.filter((c) => c.id !== caseId))
         deleteCaseDocuments(caseId).catch(() => {})

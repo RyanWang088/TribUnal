@@ -29,6 +29,12 @@ const NO_KEY_ERROR =
 // Forces the model to answer via a single tool call and returns the parsed
 // arguments. Throws with a user-safe message if the model replies in prose
 // or the arguments are not valid JSON, so callers can map it to a 502.
+// Anchoring guard: every call is built here from scratch — a system prompt
+// and one user message carrying the structured fact record. No prior turn,
+// no earlier answer and no previous artifact is ever appended. Each
+// artifact (summary, reality check, title) is therefore regenerated from
+// the facts the claimant recorded, not from a conversation that has been
+// drifting away from them. Do not add a messages/history parameter here.
 async function runStructured({ system, user, tool, maxTokens }) {
   const completion = await openai.chat.completions.create({
     model: MODEL,
@@ -282,9 +288,13 @@ const CASE_SUMMARY_TOOL = {
           type: 'object',
           properties: {
             title: { type: 'string', description: 'Short heading, e.g. "SCT monetary limit".' },
-            summary: {
-              type: 'string',
-              description: 'Plain-English explanation of what the rule actually says. 1–3 sentences, no legalese.',
+            summary_points: {
+              type: 'array',
+              description:
+                'What the rule actually says, as 2-4 short bullet points in plain English. One idea per bullet, no legalese, no sentence fragments joined by semicolons.',
+              minItems: 1,
+              maxItems: 4,
+              items: { type: 'string' },
             },
             relevance: {
               type: 'string',
@@ -299,7 +309,7 @@ const CASE_SUMMARY_TOOL = {
               items: { type: 'string' },
             },
           },
-          required: ['title', 'summary', 'relevance', 'source', 'provisions'],
+          required: ['title', 'summary_points', 'relevance', 'source', 'provisions'],
         },
       },
       strengths: {
@@ -309,14 +319,18 @@ const CASE_SUMMARY_TOOL = {
           type: 'object',
           properties: {
             point: { type: 'string', description: 'The argument in one sentence.' },
-            basis: {
-              type: 'string',
-              description: 'Which of the claimant\'s stated facts or evidence supports it, quoted or closely paraphrased.',
+            basis_points: {
+              type: 'array',
+              description:
+                "Which of the claimant's stated facts or evidence supports it, as 2-4 short bullet points. Quote or closely paraphrase their own words in each bullet. One fact per bullet.",
+              minItems: 1,
+              maxItems: 4,
+              items: { type: 'string' },
             },
             related: relatedLaw,
             citations,
           },
-          required: ['point', 'basis', 'related', 'citations'],
+          required: ['point', 'basis_points', 'related', 'citations'],
         },
       },
       weaknesses: {
@@ -327,7 +341,14 @@ const CASE_SUMMARY_TOOL = {
           type: 'object',
           properties: {
             point: { type: 'string', description: 'The weakness in one sentence.' },
-            why: { type: 'string', description: 'Why it matters, tied to the facts given.' },
+            why_points: {
+              type: 'array',
+              description:
+                'Why it matters, tied to the facts given, as 2-4 short bullet points. One reason per bullet.',
+              minItems: 1,
+              maxItems: 4,
+              items: { type: 'string' },
+            },
             evidence_needed: {
               type: 'string',
               description: 'What document or fact would address it. Describe evidence, not legal strategy.',
@@ -335,7 +356,7 @@ const CASE_SUMMARY_TOOL = {
             related: relatedLaw,
             citations,
           },
-          required: ['point', 'why', 'evidence_needed', 'related', 'citations'],
+          required: ['point', 'why_points', 'evidence_needed', 'related', 'citations'],
         },
       },
       searches: {
@@ -410,16 +431,17 @@ within each. A consumer claim against a business, for example, will usually enga
 jurisdiction and limit provisions, the procedural rules for lodging and hearing it, AND the consumer \
 protection regime; a claim that names the wrong forum will engage the statute that sends it elsewhere. \
 Do not stop at the single most obvious rule.
-   For each entry give: what the rule says, why it matters for THIS claimant's stated facts, and the \
-specific sections engaged. Order entries from most directly relevant to least — the L1, L2, … labels \
+   For each entry give: what the rule says AS 2-4 SHORT BULLET POINTS (one idea per bullet, plain \
+English, no legalese), why it matters for THIS claimant's stated facts, and the specific sections engaged. Order entries from most directly relevant to least — the L1, L2, … labels \
 follow that order, so the ordering is the ranking.
    Cite a section number only where you are confident it is correct; an empty provision list is better \
 than a guessed section. Never cite case law, judgments, other statutes, or anything not on the list \
 above — a fabricated authority is worse than no authority.
 
 2. STRONGEST ARGUMENTS — the points where the claimant's own account and evidence are clearest. Each must \
-trace back to a specific stated fact: quote or closely paraphrase the claimant's own words in the basis \
-field, so they can see exactly what the point rests on. Each MUST cite at least one L-label: the rule it \
+trace back to specific stated facts: give 2-4 SHORT BULLET POINTS in the basis_points field, quoting or \
+closely paraphrasing the claimant's own words, one fact per bullet, so they can see exactly what the \
+point rests on. Each MUST cite at least one L-label: the rule it \
 is strong under. If no listed rule fits, add that rule to RELEVANT LAW first. Label S1, S2, …
 
 3. WEAKNESSES — be critical and specific. Look for: facts stated without evidence, dates or amounts that are \
@@ -427,7 +449,8 @@ vague or inconsistent, anything the claimant said they were unsure about, steps 
 demand made, no attempt to negotiate), legal conclusions asserted as fact, and points the respondent \
 would obviously dispute. For each, say what evidence would address it, and cite at least one L-label: \
 the rule the gap matters under. Label W1, W2, … A thin or one-sided account should produce more \
-weaknesses, not fewer. Do not soften a real problem to be encouraging.
+weaknesses, not fewer. Do not soften a real problem to be encouraging. Give the reasons as 2-4 SHORT \
+BULLET POINTS in the why_points field, one reason per bullet.
 
 4. CASE SEARCHES — at least TEN searches the claimant can run on the Singapore Judiciary judgments site to \
 find relevant case law. Use ONLY these eLitigation advanced-search operators:
@@ -461,8 +484,9 @@ quotation marks, never tidy up wording, never merge two passages into one quote.
 - Only ever quote from the documents actually provided below. If none is relevant to a point, leave its \
 citations empty. An empty citation list is always better than an invented one.
 - A document marked "[TRUNCATED]" was cut short; do not cite anything you were not shown.
-- Every quote is checked against the source text after you reply, and anything that does not match is \
-flagged to the claimant as unverified. Accuracy is not optional.
+- Every quote is checked against the source text after you reply. A quote that does not appear in the \
+document it names is DELETED, and any point left with no surviving citation is deleted with it. \
+Inventing a citation therefore destroys the point it was meant to support. Accuracy is not optional.
 
 Write in plain English for a layperson. Always call the report_case_summary tool — never reply in plain text.`
 
@@ -519,40 +543,120 @@ function verifyCitations(raw, docsByIndex) {
     .filter((c) => c.quote)
 }
 
-// Normalises the model's output before it reaches the browser: assigns
-// index labels by position (so they always line up with the order shown),
-// resolves source ids to real URLs, and drops anything citing a source
-// outside the allow-list.
+// Provisions are the citations attached to a rule. There is no statute-text
+// database here to look a section number up in, so what can be checked is the
+// shape: "s 5(3)(a)", "r 12", "reg 4", "First Schedule". Anything that is not
+// recognisably a provision reference is not a citation at all and is dropped.
+// Whether a well-formed section number says what the summary claims is left to
+// the claimant to confirm against SSO — see the verification gate on the client.
+const PROVISION_PATTERN =
+  /^(?:ss?|rr?|regs?|arts?|paras?|paragraphs?|sections?|rules?|regulations?|articles?)\.?\s*\d/i
+const SCHEDULE_PATTERN = /schedule/i
+
+function provisionLooksValid(p) {
+  return PROVISION_PATTERN.test(p) || SCHEDULE_PATTERN.test(p)
+}
+
+// Removing false positives: every quote has already been checked against the
+// document it names, so here the ones that were not found are deleted rather
+// than shown with a warning. A quote the document does not contain is not a
+// citation; leaving it on screen only invites the claimant to rely on it.
+const keepVerified = (citations) => citations.filter((c) => c.verified)
+
+// Checking omissions: a point that cited a document but has no citation left
+// once the false positives are gone is unsupported, so the point goes with
+// them. A point that never claimed a citation is left alone — when nothing has
+// been uploaded there is no database to check against, and deleting every
+// point would say more about the empty document store than about the case.
+function pruneUnsupported(items) {
+  const removed = []
+  const kept = []
+  for (const item of items) {
+    if (item.claimedCitations > 0 && item.citations.length === 0) removed.push(item)
+    else kept.push(item)
+  }
+  return { kept, removed }
+}
+
+// Normalises the model's output before it reaches the browser: deletes
+// citations that do not check out and the points left unsupported by their
+// removal, assigns index labels by position, resolves source ids to real URLs,
+// and drops anything citing a source outside the allow-list.
 function shapeCaseSummary(raw, docs = []) {
   const docsByIndex = Object.fromEntries(docs.map((d) => [d.index, d]))
+  const integrity = {
+    documentsSupplied: docs.length,
+    citationsChecked: 0,
+    citationsDeleted: 0,
+    provisionsDeleted: 0,
+    pointsDeleted: 0,
+  }
+
   const law = asArray(raw.law)
     .filter((l) => sourceById[l.source])
-    .map((l, i) => ({
-      index: `L${i + 1}`,
-      title: String(l.title ?? ''),
-      summary: String(l.summary ?? ''),
-      relevance: String(l.relevance ?? ''),
-      provisions: asArray(l.provisions).map((p) => String(p).trim()).filter(Boolean),
-      source: sourceById[l.source],
-    }))
-  const strengths = asArray(raw.strengths).map((s, i) => ({
-    index: `S${i + 1}`,
+    .map((l, i) => {
+      const claimed = asArray(l.provisions).map((p) => String(p).trim()).filter(Boolean)
+      const provisions = claimed.filter(provisionLooksValid)
+      integrity.provisionsDeleted += claimed.length - provisions.length
+      return {
+        index: `L${i + 1}`,
+        title: String(l.title ?? ''),
+        summaryPoints: asArray(l.summary_points).map((t) => String(t).trim()).filter(Boolean),
+        relevance: String(l.relevance ?? ''),
+        provisions,
+        source: sourceById[l.source],
+      }
+    })
+
+  // Verify, delete the false positives, then drop the points left unsupported.
+  function gradeCitations(rawCitations) {
+    const checked = verifyCitations(rawCitations, docsByIndex)
+    const citations = keepVerified(checked)
+    integrity.citationsChecked += checked.length
+    integrity.citationsDeleted += checked.length - citations.length
+    return { citations, claimedCitations: checked.length }
+  }
+
+  const rawStrengths = asArray(raw.strengths).map((s) => ({
     point: String(s.point ?? ''),
-    basis: String(s.basis ?? ''),
+    basisPoints: asArray(s.basis_points).map((t) => String(t).trim()).filter(Boolean),
     related: cleanIndices(s.related),
-    citations: verifyCitations(s.citations, docsByIndex),
+    ...gradeCitations(s.citations),
   }))
-  const weaknesses = asArray(raw.weaknesses).map((w, i) => ({
-    index: `W${i + 1}`,
+  const rawWeaknesses = asArray(raw.weaknesses).map((w) => ({
     point: String(w.point ?? ''),
-    why: String(w.why ?? ''),
+    whyPoints: asArray(w.why_points).map((t) => String(t).trim()).filter(Boolean),
     evidenceNeeded: String(w.evidence_needed ?? ''),
     related: cleanIndices(w.related),
-    citations: verifyCitations(w.citations, docsByIndex),
+    ...gradeCitations(w.citations),
   }))
+
+  const prunedS = pruneUnsupported(rawStrengths)
+  const prunedW = pruneUnsupported(rawWeaknesses)
+  integrity.pointsDeleted = prunedS.removed.length + prunedW.removed.length
+
+  // Labels are assigned after pruning so they stay contiguous, which means
+  // cross-references written against the pre-prune ordering have to be
+  // remapped. A reference to a deleted point is dropped rather than left
+  // pointing at nothing.
+  const remap = {}
+  const label = (items, prefix, originals) =>
+    items.map((item, i) => {
+      const index = `${prefix}${i + 1}`
+      remap[`${prefix}${originals.indexOf(item) + 1}`] = index
+      return { ...item, index }
+    })
+  const strengths = label(prunedS.kept, 'S', rawStrengths)
+  const weaknesses = label(prunedW.kept, 'W', rawWeaknesses)
+
+  const fixRefs = (refs) =>
+    refs.map((r) => (r[0] === 'S' || r[0] === 'W' ? remap[r] : r)).filter(Boolean)
+  for (const item of [...strengths, ...weaknesses]) item.related = fixRefs(item.related)
+  for (const item of [...strengths, ...weaknesses]) delete item.claimedCitations
+
   const scopeRank = { broad: 0, medium: 1, narrow: 2 }
   const searches = asArray(raw.searches)
-    .map((s) => ({ query: String(s.query ?? '').trim(), explanation: String(s.explanation ?? ''), scope: s.scope, addresses: cleanIndices(s.addresses) }))
+    .map((s) => ({ query: String(s.query ?? '').trim(), explanation: String(s.explanation ?? ''), scope: s.scope, addresses: fixRefs(cleanIndices(s.addresses)) }))
     .filter((s) => s.query)
     .sort((a, b) => (scopeRank[a.scope] ?? 1) - (scopeRank[b.scope] ?? 1))
     .map((s, i) => ({ ...s, index: `Q${i + 1}`, problem: searchSyntaxProblem(s.query) }))
@@ -563,7 +667,7 @@ function shapeCaseSummary(raw, docs = []) {
     .map((l) => ({
       ...sourceById[l.source],
       reason: String(l.reason ?? ''),
-      related: cleanIndices(l.related),
+      related: fixRefs(cleanIndices(l.related)),
     }))
   return {
     overallNote: String(raw.overall_note ?? ''),
@@ -572,6 +676,7 @@ function shapeCaseSummary(raw, docs = []) {
     weaknesses,
     searches,
     links,
+    integrity,
     documents: docs.map((d) => ({ index: d.index, name: d.name, truncated: d.truncated })),
   }
 }
