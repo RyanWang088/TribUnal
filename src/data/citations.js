@@ -39,6 +39,20 @@ export function lawCitationKey(law) {
   return `l:${hash([law.source?.id, ...(law.provisions ?? [])].join('|'))}`
 }
 
+// A dotpoint's authority is a case when it carries a neutral citation such as
+// "[2022] SGHC 270 at [42]". The citation is what the claimant pastes into
+// the judgments database; the paragraph is what they then look for.
+const CASE_AUTHORITY = /\[(?:19|20)\d{2}\]\s+(?:\d+\s+)?[A-Z][A-Za-z()]{1,12}\s+\d+/
+
+export function caseAuthority(authority) {
+  const m = String(authority ?? '').match(CASE_AUTHORITY)
+  return m ? m[0] : ''
+}
+
+export function caseCitationKey(authority) {
+  return `c:${hash(String(authority ?? ''))}`
+}
+
 export function isVerified(checks, key) {
   const check = checks?.[key]
   return Boolean(check && VERIFICATION_QUESTIONS.every((q) => check[q.id]))
@@ -62,6 +76,9 @@ export function allCitations(summary) {
     // Quotations hang off each dotpoint. Older stored summaries kept them on
     // the item, so both places are walked.
     for (const d of item.dotpoints ?? []) {
+      if (caseAuthority(d?.authority)) {
+        out.push({ kind: 'case', key: caseCitationKey(d.authority), owner: item.index })
+      }
       for (const c of d.citations ?? []) {
         out.push({ kind: 'document', key: documentCitationKey(c), owner: item.index })
       }
@@ -98,7 +115,14 @@ export function exportableSummary(summary, checks) {
         const dotpoints = (item.dotpoints ?? [])
           .map((d) => {
             const kept = (d.citations ?? []).filter((c) => isVerified(checks, documentCitationKey(c)))
-            return { ...d, citations: kept, citationsStripped: (d.citations ?? []).length - kept.length }
+            const caseUnverified = caseAuthority(d.authority) && !isVerified(checks, caseCitationKey(d.authority))
+            return {
+              ...d,
+              authority: caseUnverified ? '' : d.authority,
+              authorityStripped: Boolean(caseUnverified),
+              citations: kept,
+              citationsStripped: (d.citations ?? []).length - kept.length,
+            }
           })
           .filter((d) => d.citations.length > 0 || d.citationsStripped === 0)
         const kept = (item.citations ?? []).filter((c) => isVerified(checks, documentCitationKey(c)))

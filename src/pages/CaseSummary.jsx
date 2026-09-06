@@ -9,6 +9,8 @@ import {
   documentCitationKey,
   isVerified,
   lawCitationKey,
+  caseCitationKey,
+  caseAuthority,
   verificationCounts,
 } from '../data/citations.js'
 
@@ -31,46 +33,53 @@ function Points({ value, className = 'small' }) {
 // How to actually check a citation, spelled out rather than assumed. The
 // claimant is being asked to attest to something, so they are told what the
 // attestation involves: open the source, find the provision or paragraph,
-// read it. `searchText` and `caseCitation` fill the placeholders.
-function VerifySteps({ searchText, caseCitation }) {
+// read it. A statute and a case are looked up in different places, so each
+// gate shows only the steps for its own kind. `token` fills the placeholder.
+function VerifySteps({ kind, token }) {
   return (
     <div className="verify-steps">
       <p className="verify-steps-head">Please check the following:</p>
-      <p className="verify-steps-kind">Statute</p>
-      <ol>
-        <li>
-          Search &ldquo;<span className="verify-token">{searchText}</span>&rdquo; on your browser
-        </li>
-        <li>Open the statute</li>
-        <li>Locate the section</li>
-      </ol>
-      <p className="verify-steps-kind">Cases:</p>
-      <ol>
-        <li>Open database</li>
-        <li>
-          Paste{' '}
-          {caseCitation ? (
-            <>
-              &ldquo;<span className="verify-token">{caseCitation}</span>&rdquo;
-            </>
-          ) : (
-            <>
-              a citation in the form{' '}
-              <span className="verify-token verify-token-empty">[Year] Volume ReportSeries</span>
-            </>
-          )}{' '}
-          into the database
-        </li>
-        <li>Find open the case</li>
-        <li>Find the paragraph with the corresponding number</li>
-      </ol>
+      {kind === 'case' ? (
+        <>
+          <p className="verify-steps-kind">Cases:</p>
+          <ol>
+            <li>Open database</li>
+            <li>
+              Paste{' '}
+              {token ? (
+                <>
+                  &ldquo;<span className="verify-token">{token}</span>&rdquo;
+                </>
+              ) : (
+                <>
+                  &ldquo;<span className="verify-token verify-token-empty">[Year] Volume ReportSeries</span>&rdquo;
+                </>
+              )}{' '}
+              into the database
+            </li>
+            <li>Find open the case</li>
+            <li>Find the paragraph with the corresponding number</li>
+          </ol>
+        </>
+      ) : (
+        <>
+          <p className="verify-steps-kind">Statute</p>
+          <ol>
+            <li>
+              Search &ldquo;<span className="verify-token">{token}</span>&rdquo; on your browser
+            </li>
+            <li>Open the statute</li>
+            <li>Locate the section</li>
+          </ol>
+        </>
+      )}
     </div>
   )
 }
 
 // The two questions the claimant answers for themselves. Both must be ticked
 // before the citation can leave the app in an export — see data/citations.js.
-function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, searchText, caseCitation }) {
+function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, kind = 'statute', token }) {
   const verified = isVerified(checks, citationKey)
   return (
     <div className={`verify ${verified ? 'verified' : ''}`}>
@@ -88,7 +97,7 @@ function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, sea
           </button>
         )}
       </div>
-      <VerifySteps searchText={searchText} caseCitation={caseCitation} />
+      <VerifySteps kind={kind} token={token} />
       {VERIFICATION_QUESTIONS.map((q) => (
         <label key={q.id} className="verify-q">
           <input
@@ -123,6 +132,17 @@ function Dotpoints({ items, checks, onCheck, onOpenDocument }) {
           <li key={i} className="dotpoint">
             <span className="dotpoint-text">{d.text}</span>
             {d.authority && <span className="dotpoint-authority">{d.authority}</span>}
+            {caseAuthority(d.authority) && (
+              <VerifyGate
+                citationKey={caseCitationKey(d.authority)}
+                checks={checks}
+                onCheck={onCheck}
+                openLabel="Open judgments database"
+                href="https://www.judiciary.gov.sg/judgments/judgments-case-summaries"
+                kind="case"
+                token={caseAuthority(d.authority)}
+              />
+            )}
             <Citations
               items={d.citations}
               checks={checks}
@@ -159,8 +179,7 @@ function Citations({ items, checks, onCheck, onOpenDocument }) {
               onCheck={onCheck}
               openLabel={`Open ${c.documentName}`}
               onOpen={() => onOpenDocument(c.document)}
-              searchText={c.pinpoint ? `${c.documentName} ${c.pinpoint}` : c.documentName}
-              caseCitation=""
+              token={c.pinpoint ? `${c.documentName} ${c.pinpoint}` : c.documentName}
             />
           </li>
         )
@@ -445,7 +464,7 @@ export default function CaseSummary({ caseData }) {
             </div>
           )}
 
-          <h3>Statute Searches</h3>
+          <h3>Statute/Case Searches</h3>
           {summary.law.length === 0 ? (
             <p className="muted small">No specific rules identified.</p>
           ) : (
@@ -475,8 +494,7 @@ export default function CaseSummary({ caseData }) {
                       onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
                       openLabel="Open on SSO"
                       href={l.source.url}
-                      searchText={`${l.source.label} ${(l.provisions ?? []).join(', ')}`.trim()}
-                      caseCitation={l.caseCitation}
+                      token={`${l.source.label} ${(l.provisions ?? []).join(', ')}`.trim()}
                     />
                   </div>
                 </li>
