@@ -308,8 +308,13 @@ const CASE_SUMMARY_TOOL = {
                 'The specific sections or rules engaged, e.g. ["s 5(1)", "s 5(3)(a)"]. List every one that applies. Include a number only if you are confident it is correct — an empty list is better than a guessed section.',
               items: { type: 'string' },
             },
+            case_citation: {
+              type: 'string',
+              description:
+                'Neutral citation of the reported Singapore decision most relevant to this provision, in the form "[Year] Volume ReportSeries Page" (e.g. "[2019] 2 SLR 1234") or "[Year] Court Number" (e.g. "[2019] SGHC 123"). Give the citation of a decision you actually know, choosing a leading one you can cite exactly over a more apposite one you would have to reconstruct. Return an empty string only if you know of no decision on this provision at all.',
+            },
           },
-          required: ['title', 'summary_points', 'relevance', 'source', 'provisions'],
+          required: ['title', 'summary_points', 'relevance', 'source', 'provisions', 'case_citation'],
         },
       },
       strengths: {
@@ -435,8 +440,16 @@ Do not stop at the single most obvious rule.
 English, no legalese), why it matters for THIS claimant's stated facts, and the specific sections engaged. Order entries from most directly relevant to least — the L1, L2, … labels \
 follow that order, so the ordering is the ranking.
    Cite a section number only where you are confident it is correct; an empty provision list is better \
-than a guessed section. Never cite case law, judgments, other statutes, or anything not on the list \
-above — a fabricated authority is worse than no authority.
+than a guessed section. Never cite other statutes or anything not on the list above — a fabricated \
+authority is worse than no authority.
+   The case_citation field is the ONE place you may name a decision. Give the neutral citation of \
+the reported Singapore decision most relevant to the provision, so the claimant has a real starting \
+point to look up rather than a blank. Prefer a leading, well-known decision you can cite exactly \
+over a more precisely apposite one whose citation you would have to reconstruct: the citation has \
+to be right, the choice of case only has to be useful. Return an empty string only where you know \
+of no decision on the provision at all. Every citation is checked for form, shown to the claimant \
+as unverified until they confirm it in the database themselves, and stripped from any export until \
+they do.
 
 2. STRONGEST ARGUMENTS — the points where the claimant's own account and evidence are clearest. Each must \
 trace back to specific stated facts: give 2-4 SHORT BULLET POINTS in the basis_points field, quoting or \
@@ -466,8 +479,8 @@ the results.
 operators do in words, so the claimant understands the search rather than just pasting it. Keep quotes \
 and brackets balanced. Choose distinctive keywords: words that appear in almost every judgment will \
 bury the useful results.
-   Do NOT name any case, judge or citation anywhere. Your job here is to help the claimant FIND \
-judgments, never to assert what they say.
+   Do NOT name any case, judge or citation in a SEARCH. A search is a query, not an authority: your job \
+here is to help the claimant FIND judgments, never to assert what they say.
 
 5. LINKS — which of the listed sources the claimant should actually read, with one sentence on what to \
 look for there, and which L/S/W items each supports. Only include sources relevant to this claim.
@@ -557,6 +570,17 @@ function provisionLooksValid(p) {
   return PROVISION_PATTERN.test(p) || SCHEDULE_PATTERN.test(p)
 }
 
+// A case citation the model volunteered. There is no judgments database here
+// to look it up in, so as with provisions only the form can be checked:
+// "[2019] 2 SLR 1234" or "[2019] SGHC 123". Anything else is not a citation
+// and is dropped. Whether a well-formed citation names a decision that exists
+// is exactly what the claimant is asked to confirm before it can be exported.
+const CASE_CITATION_PATTERN = /^\[(?:19|20)\d{2}\]\s+(?:\d+\s+)?[A-Z][A-Za-z()]{1,12}\s+\d+$/
+
+function caseCitationLooksValid(c) {
+  return CASE_CITATION_PATTERN.test(c)
+}
+
 // Removing false positives: every quote has already been checked against the
 // document it names, so here the ones that were not found are deleted rather
 // than shown with a warning. A quote the document does not contain is not a
@@ -589,6 +613,7 @@ function shapeCaseSummary(raw, docs = []) {
     citationsChecked: 0,
     citationsDeleted: 0,
     provisionsDeleted: 0,
+    caseCitationsDeleted: 0,
     pointsDeleted: 0,
   }
 
@@ -598,12 +623,16 @@ function shapeCaseSummary(raw, docs = []) {
       const claimed = asArray(l.provisions).map((p) => String(p).trim()).filter(Boolean)
       const provisions = claimed.filter(provisionLooksValid)
       integrity.provisionsDeleted += claimed.length - provisions.length
+      const claimedCase = String(l.case_citation ?? '').trim()
+      const caseCitation = caseCitationLooksValid(claimedCase) ? claimedCase : ''
+      if (claimedCase && !caseCitation) integrity.caseCitationsDeleted += 1
       return {
         index: `L${i + 1}`,
         title: String(l.title ?? ''),
         summaryPoints: asArray(l.summary_points).map((t) => String(t).trim()).filter(Boolean),
         relevance: String(l.relevance ?? ''),
         provisions,
+        caseCitation,
         source: sourceById[l.source],
       }
     })

@@ -31,15 +31,15 @@ function Points({ value, className = 'small' }) {
 // How to actually check a citation, spelled out rather than assumed. The
 // claimant is being asked to attest to something, so they are told what the
 // attestation involves: open the source, find the provision or paragraph,
-// read it. `statuteName` and `citationText` fill the placeholders.
-function VerifySteps({ statuteName, citationText }) {
+// read it. `searchText` and `caseCitation` fill the placeholders.
+function VerifySteps({ searchText, caseCitation }) {
   return (
     <div className="verify-steps">
       <p className="verify-steps-head">Please check the following:</p>
       <p className="verify-steps-kind">Statute</p>
       <ol>
         <li>
-          Search &ldquo;<span className="verify-token">{statuteName}</span>&rdquo; on your browser
+          Search &ldquo;<span className="verify-token">{searchText}</span>&rdquo; on your browser
         </li>
         <li>Open the statute</li>
         <li>Locate the section</li>
@@ -48,7 +48,18 @@ function VerifySteps({ statuteName, citationText }) {
       <ol>
         <li>Open database</li>
         <li>
-          Paste &ldquo;<span className="verify-token">{citationText}</span>&rdquo; into the database
+          Paste{' '}
+          {caseCitation ? (
+            <>
+              &ldquo;<span className="verify-token">{caseCitation}</span>&rdquo;
+            </>
+          ) : (
+            <>
+              a citation in the form{' '}
+              <span className="verify-token verify-token-empty">[Year] Volume ReportSeries</span>
+            </>
+          )}{' '}
+          into the database
         </li>
         <li>Find open the case</li>
         <li>Find the paragraph with the corresponding number</li>
@@ -59,7 +70,7 @@ function VerifySteps({ statuteName, citationText }) {
 
 // The two questions the claimant answers for themselves. Both must be ticked
 // before the citation can leave the app in an export — see data/citations.js.
-function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, statuteName, citationText }) {
+function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, searchText, caseCitation }) {
   const verified = isVerified(checks, citationKey)
   return (
     <div className={`verify ${verified ? 'verified' : ''}`}>
@@ -77,7 +88,7 @@ function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, sta
           </button>
         )}
       </div>
-      <VerifySteps statuteName={statuteName} citationText={citationText} />
+      <VerifySteps searchText={searchText} caseCitation={caseCitation} />
       {VERIFICATION_QUESTIONS.map((q) => (
         <label key={q.id} className="verify-q">
           <input
@@ -115,8 +126,8 @@ function Citations({ items, checks, onCheck, onOpenDocument }) {
               onCheck={onCheck}
               openLabel={`Open ${c.documentName}`}
               onOpen={() => onOpenDocument(c.document)}
-              statuteName={c.documentName}
-              citationText={c.pinpoint ? `${c.documentName} ${c.pinpoint}` : c.documentName}
+              searchText={c.pinpoint ? `${c.documentName} ${c.pinpoint}` : c.documentName}
+              caseCitation=""
             />
           </li>
         )
@@ -365,6 +376,10 @@ export default function CaseSummary({ caseData }) {
                 <> Dropped {summary.integrity.provisionsDeleted} malformed provision reference
                   {summary.integrity.provisionsDeleted === 1 ? '' : 's'}.</>
               )}
+              {summary.integrity.caseCitationsDeleted > 0 && (
+                <> Dropped {summary.integrity.caseCitationsDeleted} malformed case citation
+                  {summary.integrity.caseCitationsDeleted === 1 ? '' : 's'}.</>
+              )}
             </p>
           )}
 
@@ -376,7 +391,7 @@ export default function CaseSummary({ caseData }) {
               <p className="small">
                 {counts.unverified === 0
                   ? 'Every citation has been checked against its source. All of them would be included in an export.'
-                  : `${counts.unverified} citation${counts.unverified === 1 ? '' : 's'} would be stripped from an export. Open each source below and answer both questions before relying on it.`}
+                  : 'Open each source below and answer both questions before relying on it.'}
               </p>
             </div>
           )}
@@ -411,8 +426,8 @@ export default function CaseSummary({ caseData }) {
                       onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
                       openLabel="Open on SSO"
                       href={l.source.url}
-                      statuteName={l.source.label}
-                      citationText={`${l.source.label} ${(l.provisions ?? []).join(', ')}`.trim()}
+                      searchText={`${l.source.label} ${(l.provisions ?? []).join(', ')}`.trim()}
+                      caseCitation={l.caseCitation}
                     />
                   </div>
                 </li>

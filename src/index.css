@@ -1996,3 +1996,7 @@ a.idx:hover {
   font-weight: 600;
   color: var(--navy);
 }
+.verify-token-empty {
+  color: var(--muted);
+  font-style: italic;
+}
