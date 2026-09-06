@@ -53,7 +53,19 @@ export function allCitations(summary) {
   for (const law of summary.law ?? []) {
     out.push({ kind: 'law', key: lawCitationKey(law), owner: law.index })
   }
-  for (const item of [...(summary.strengths ?? []), ...(summary.weaknesses ?? [])]) {
+  const items = [
+    ...(summary.strengths ?? []),
+    ...(summary.weaknesses ?? []),
+    ...(summary.organisation?.sections ?? []),
+  ]
+  for (const item of items) {
+    // Quotations hang off each dotpoint. Older stored summaries kept them on
+    // the item, so both places are walked.
+    for (const d of item.dotpoints ?? []) {
+      for (const c of d.citations ?? []) {
+        out.push({ kind: 'document', key: documentCitationKey(c), owner: item.index })
+      }
+    }
     for (const c of item.citations ?? []) {
       out.push({ kind: 'document', key: documentCitationKey(c), owner: item.index })
     }
@@ -77,17 +89,38 @@ export function exportableSummary(summary, checks) {
     if (isVerified(checks, lawCitationKey(l))) return l
     return { ...l, provisions: [], provisionsStripped: (l.provisions ?? []).length > 0, unverified: true }
   })
+  // A dotpoint whose quotations the claimant has not verified is stripped, and
+  // an item left with no dotpoints goes with it — the same rule the server
+  // applies to quotations it could prove false.
   const filterItems = (items) =>
     (items ?? [])
       .map((item) => {
+        const dotpoints = (item.dotpoints ?? [])
+          .map((d) => {
+            const kept = (d.citations ?? []).filter((c) => isVerified(checks, documentCitationKey(c)))
+            return { ...d, citations: kept, citationsStripped: (d.citations ?? []).length - kept.length }
+          })
+          .filter((d) => d.citations.length > 0 || d.citationsStripped === 0)
         const kept = (item.citations ?? []).filter((c) => isVerified(checks, documentCitationKey(c)))
-        return { ...item, citations: kept, citationsStripped: (item.citations ?? []).length - kept.length }
+        return {
+          ...item,
+          dotpoints,
+          citations: kept,
+          citationsStripped: (item.citations ?? []).length - kept.length,
+        }
       })
-      .filter((item) => (item.citations ?? []).length > 0 || item.citationsStripped === 0)
+      .filter(
+        (item) =>
+          (item.dotpoints ?? []).length > 0 &&
+          ((item.citations ?? []).length > 0 || item.citationsStripped === 0),
+      )
   return {
     ...summary,
     law,
     strengths: filterItems(summary.strengths),
     weaknesses: filterItems(summary.weaknesses),
+    organisation: summary.organisation
+      ? { ...summary.organisation, sections: filterItems(summary.organisation.sections) }
+      : null,
   }
 }

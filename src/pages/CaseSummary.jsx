@@ -14,15 +14,15 @@ import {
 
 const formatChars = (n) => (n >= 1000 ? `${Math.round(n / 1000)}k characters` : `${n} characters`)
 
-// Summaries and bases are point form. Older stored summaries kept them as a
-// single string, so both shapes render.
+// Summaries are point form. Older stored summaries kept them as a single
+// string, so both shapes render.
 function Points({ value, className = 'small' }) {
   const items = Array.isArray(value) ? value.filter(Boolean) : value ? [value] : []
   if (items.length === 0) return null
   return (
     <ul className={`point-list ${className}`}>
       {items.map((t, i) => (
-        <li key={i}>{t}</li>
+        <li key={i}>{typeof t === 'string' ? t : t.text}</li>
       ))}
     </ul>
   )
@@ -103,6 +103,39 @@ function VerifyGate({ citationKey, checks, onCheck, openLabel, onOpen, href, sea
   )
 }
 
+// Every supporting argument is a dotpoint carrying its own pinpoint reference
+// and its own quotations, each of which has to be verified before it can be
+// exported. Older stored summaries kept plain strings here.
+function Dotpoints({ items, checks, onCheck, onOpenDocument }) {
+  // Summaries stored before dotpoints existed kept a single string here, and
+  // an API server still running the old code returns one too — normalise
+  // rather than assume an array, or the whole summary fails to render.
+  const list = (Array.isArray(items) ? items : items ? [items] : []).filter(Boolean)
+  if (list.length === 0) return null
+  return (
+    <ul className="dotpoint-list">
+      {list.map((d, i) =>
+        typeof d === 'string' ? (
+          <li key={i} className="dotpoint">
+            {d}
+          </li>
+        ) : (
+          <li key={i} className="dotpoint">
+            <span className="dotpoint-text">{d.text}</span>
+            {d.authority && <span className="dotpoint-authority">{d.authority}</span>}
+            <Citations
+              items={d.citations}
+              checks={checks}
+              onCheck={onCheck}
+              onOpenDocument={onOpenDocument}
+            />
+          </li>
+        ),
+      )}
+    </ul>
+  )
+}
+
 // Quotes that did not appear in the document they named have already been
 // deleted server-side, along with any point left unsupported by their
 // removal. What is left still has to be checked by the claimant before it can
@@ -133,6 +166,22 @@ function Citations({ items, checks, onCheck, onOpenDocument }) {
         )
       })}
     </ul>
+  )
+}
+
+// The download and upload walkthroughs are fixed steps, so they are written
+// here rather than asked of the model: they are the same for every case, and
+// a step the model paraphrased differently each time would be worse.
+function HowTo({ title, steps }) {
+  return (
+    <div className="howto">
+      <h3>{title}</h3>
+      <ol className="howto-steps">
+        {steps.map((step, i) => (
+          <li key={i}>{step}</li>
+        ))}
+      </ol>
+    </div>
   )
 }
 
@@ -396,7 +445,7 @@ export default function CaseSummary({ caseData }) {
             </div>
           )}
 
-          <h3>Relevant law</h3>
+          <h3>Statute Searches</h3>
           {summary.law.length === 0 ? (
             <p className="muted small">No specific rules identified.</p>
           ) : (
@@ -438,13 +487,22 @@ export default function CaseSummary({ caseData }) {
             This list is non-exhaustive. Please note that there may be more statutory provisions that may
             affect your case.
           </p>
-          <p className="muted small">
-            To read a statute in full, search its title on{' '}
-            <a href="https://sso.agc.gov.sg/" target="_blank" rel="noreferrer">
-              Singapore Statutes Online
-            </a>
-            , open it, and download it. Repeat for each statute above.
-          </p>
+
+          <HowTo
+            title="Downloading Statute"
+            steps={[
+              <>
+                Go onto the Statutes Online website:{' '}
+                <a href="https://sso.agc.gov.sg/" target="_blank" rel="noreferrer">
+                  https://sso.agc.gov.sg/
+                </a>
+              </>,
+              'For the first recommended statute, search the statute title in the search bar.',
+              'Open the statute.',
+              'Download the statute.',
+              'Do this for all recommended statutes.',
+            ]}
+          />
 
           <h3>Strongest arguments</h3>
           {summary.strengths.length === 0 ? (
@@ -459,9 +517,8 @@ export default function CaseSummary({ caseData }) {
                       {s.point} <Related items={s.related} lawByIndex={lawByIndex} />
                     </div>
                     <p className="muted small">Based on:</p>
-                    <Points value={s.basisPoints ?? s.basis} className="muted small" />
-                    <Citations
-                      items={s.citations}
+                    <Dotpoints
+                      items={s.dotpoints ?? s.basisPoints ?? s.basis}
                       checks={checks}
                       onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
                       onOpenDocument={openDocument}
@@ -484,21 +541,47 @@ export default function CaseSummary({ caseData }) {
                     <div className="summary-item-title">
                       {w.point} <Related items={w.related} lawByIndex={lawByIndex} />
                     </div>
-                    <Points value={w.whyPoints ?? w.why} />
-                    <p className="muted small">What would address it: {w.evidenceNeeded}</p>
-                    <Citations
-                      items={w.citations}
+                    <Dotpoints
+                      items={w.dotpoints ?? w.whyPoints ?? w.why}
                       checks={checks}
                       onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
                       onOpenDocument={openDocument}
                     />
+                    <p className="muted small">What would address it: {w.evidenceNeeded}</p>
                   </div>
                 </li>
               ))}
             </ol>
           )}
 
-          <h3>Case searches</h3>
+          {summary.organisation && (
+            <>
+              <h3>Organisation</h3>
+              <p className="muted small">
+                <strong>{summary.organisation.approach}</strong> — {summary.organisation.rationale}
+              </p>
+              <ol className="summary-list-idx">
+                {(summary.organisation.sections ?? []).map((sec, i) => (
+                  <li key={i} className="summary-item">
+                    <span className="idx idx-O">{i + 1}</span>
+                    <div>
+                      <div className="summary-item-title">
+                        {sec.heading} <Related items={sec.related} lawByIndex={lawByIndex} />
+                      </div>
+                      <Dotpoints
+                        items={sec.dotpoints ?? sec.points}
+                        checks={checks}
+                        onCheck={(key, q, v) => setCitationCheck(caseData.id, key, q, v)}
+                        onOpenDocument={openDocument}
+                      />
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </>
+          )}
+
+          <h3>Case Searches</h3>
           <p className="muted small">
             Run these on the{' '}
             <a
@@ -508,8 +591,7 @@ export default function CaseSummary({ caseData }) {
             >
               Singapore Judiciary judgments search
             </a>
-            , broadest first. Open at least the top five results for each, and download the most recent ones —
-            then add them under Source documents above and regenerate, so the summary can quote them.
+            , broadest first.
           </p>
           {(summary.searches ?? []).length === 0 ? (
             <p className="muted small">No searches suggested.</p>
@@ -534,6 +616,17 @@ export default function CaseSummary({ caseData }) {
                       <span className={`pill pill-scope-${s.scope}`}>{s.scope}</span>{' '}
                       <Related items={s.addresses} lawByIndex={lawByIndex} />
                     </p>
+                    {(s.controlF ?? []).length > 0 && (
+                      <p className="muted small">
+                        Control-F inside each judgment for:{' '}
+                        {s.controlF.map((t, i) => (
+                          <span key={i}>
+                            {i > 0 && ', '}
+                            <code className="ctrl-f">{t}</code>
+                          </span>
+                        ))}
+                      </p>
+                    )}
                     {s.problem && (
                       <p className="small citation-flag bad">
                         ⚠ Check this search before running it: {s.problem}.
@@ -543,6 +636,79 @@ export default function CaseSummary({ caseData }) {
                 </li>
               ))}
             </ol>
+          )}
+
+          <HowTo
+            title="Downloading Case Law"
+            steps={[
+              <>
+                Go onto the court registry:{' '}
+                <a
+                  href="https://www.judiciary.gov.sg/judgments/judgments-case-summaries"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  https://www.judiciary.gov.sg/judgments/judgments-case-summaries
+                </a>
+              </>,
+              'Enter the first search recommendation into the search bar.',
+              'Open at least the top five cases.',
+              'Export these five most recent cases to your local drive.',
+              'Repeat this for each search recommendation.',
+            ]}
+          />
+
+          <HowTo
+            title="Next Steps"
+            steps={[
+              'Collect the statutes and judgments you downloaded into one folder.',
+              'Scroll up to Source documents and add them there — PDFs and text files are read in full.',
+              'Regenerate this summary so it can quote the documents you added.',
+              'Work through each citation below and tick both verification questions once you have checked it against the source.',
+            ]}
+          />
+
+          {(summary.digestPrompts ?? []).length > 0 && (
+            <>
+              <h4 className="subhead">Digesting a judgment with AI</h4>
+              <p className="muted small">
+                Paste one of these together with a judgment you downloaded. Each asks for something you can
+                check against the text in front of you.
+              </p>
+              <ul className="digest-list">
+                {summary.digestPrompts.map((t, i) => (
+                  <li key={i}>
+                    <code>{t}</code>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-sm"
+                      onClick={() => navigator.clipboard?.writeText(t)}
+                    >
+                      Copy
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+
+          {(summary.furtherSources ?? []).length > 0 && (
+            <>
+              <h4 className="subhead">Further sources to obtain</h4>
+              <ul className="summary-list-idx">
+                {summary.furtherSources.map((f, i) => (
+                  <li key={i} className="summary-item">
+                    <span className="idx idx-link">+</span>
+                    <div>
+                      <div className="summary-item-title">
+                        {f.what} <Related items={f.related} lawByIndex={lawByIndex} />
+                      </div>
+                      <p className="muted small">{f.why}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
           )}
 
           <h3>Relevant links</h3>

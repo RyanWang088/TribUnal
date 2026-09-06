@@ -261,6 +261,31 @@ const citations = {
     required: ['document', 'quote', 'pinpoint'],
   },
 }
+// Every supporting argument is a dotpoint, and every dotpoint has to say what
+// it rests on: a provision, or a case with the paragraph it was read at, plus
+// the quotation itself where the source is a document the claimant uploaded.
+// A dotpoint that cannot point at anything is an assertion, and assertions are
+// what this tool exists to catch.
+const dotpoints = {
+  type: 'array',
+  description: 'Supporting arguments as dotpoints. Each one carries its own pinpoint reference and quotations.',
+  minItems: 1,
+  maxItems: 5,
+  items: {
+    type: 'object',
+    properties: {
+      text: { type: 'string', description: 'The supporting point, in one sentence.' },
+      authority: {
+        type: 'string',
+        description:
+          'The pinpoint reference this point rests on: a statute provision ("Small Claims Tribunals Act 1984 s 5(3)(a)") or a case with the paragraph ("[2019] 2 SLR 1234 at [42]"). Where the point rests only on what the claimant themselves said, write "Claimant\'s own account" — never leave this empty and never invent a reference to fill it.',
+      },
+      citations,
+    },
+    required: ['text', 'authority', 'citations'],
+  },
+}
+
 const relatedLaw = {
   type: 'array',
   description:
@@ -324,18 +349,10 @@ const CASE_SUMMARY_TOOL = {
           type: 'object',
           properties: {
             point: { type: 'string', description: 'The argument in one sentence.' },
-            basis_points: {
-              type: 'array',
-              description:
-                "Which of the claimant's stated facts or evidence supports it, as 2-4 short bullet points. Quote or closely paraphrase their own words in each bullet. One fact per bullet.",
-              minItems: 1,
-              maxItems: 4,
-              items: { type: 'string' },
-            },
+            basis_points: dotpoints,
             related: relatedLaw,
-            citations,
           },
-          required: ['point', 'basis_points', 'related', 'citations'],
+          required: ['point', 'basis_points', 'related'],
         },
       },
       weaknesses: {
@@ -346,22 +363,14 @@ const CASE_SUMMARY_TOOL = {
           type: 'object',
           properties: {
             point: { type: 'string', description: 'The weakness in one sentence.' },
-            why_points: {
-              type: 'array',
-              description:
-                'Why it matters, tied to the facts given, as 2-4 short bullet points. One reason per bullet.',
-              minItems: 1,
-              maxItems: 4,
-              items: { type: 'string' },
-            },
+            why_points: dotpoints,
             evidence_needed: {
               type: 'string',
               description: 'What document or fact would address it. Describe evidence, not legal strategy.',
             },
             related: relatedLaw,
-            citations,
           },
-          required: ['point', 'why_points', 'evidence_needed', 'related', 'citations'],
+          required: ['point', 'why_points', 'evidence_needed', 'related'],
         },
       },
       searches: {
@@ -387,13 +396,75 @@ const CASE_SUMMARY_TOOL = {
               enum: ['broad', 'medium', 'narrow'],
               description: 'How tightly this search is drawn.',
             },
+            control_f: {
+              type: 'array',
+              description:
+                'Words and phrases to Control-F for inside a judgment this search returns, so the claimant can find the relevant passage without reading the whole thing. 2-5 entries, each a term that would actually appear in a judgment.',
+              minItems: 2,
+              maxItems: 5,
+              items: { type: 'string' },
+            },
             addresses: {
               type: 'array',
               description: 'L/S/W labels this search would help the claimant investigate. May be empty.',
               items: { type: 'string', pattern: INDEX_PATTERN },
             },
           },
-          required: ['query', 'explanation', 'scope', 'addresses'],
+          required: ['query', 'explanation', 'scope', 'control_f', 'addresses'],
+        },
+      },
+      organisation: {
+        type: 'object',
+        description:
+          'How the claimant should order their argument. Strongest point first and weakest last, unless another ordering follows the case better.',
+        properties: {
+          approach: {
+            type: 'string',
+            description:
+              'Short name for the ordering used, e.g. "Strongest to weakest", "By issue", "Chronological".',
+          },
+          rationale: {
+            type: 'string',
+            description:
+              'One or two sentences on why this ordering suits this case. If it is not strongest-to-weakest, say what makes this order easier to follow.',
+          },
+          sections: {
+            type: 'array',
+            description: 'The parts of the argument, in the order the claimant should present them.',
+            minItems: 2,
+            items: {
+              type: 'object',
+              properties: {
+                heading: { type: 'string', description: 'Short heading for this part of the argument.' },
+                points: dotpoints,
+                related: relatedIndices,
+              },
+              required: ['heading', 'points', 'related'],
+            },
+          },
+        },
+        required: ['approach', 'rationale', 'sections'],
+      },
+      digest_prompts: {
+        type: 'array',
+        description:
+          'Short prompts the claimant can paste into an AI assistant along with a judgment they downloaded, to make sense of it. Each must ask for something checkable against the text of the judgment, never a prediction about their own case.',
+        minItems: 3,
+        maxItems: 6,
+        items: { type: 'string' },
+      },
+      further_sources: {
+        type: 'array',
+        description:
+          'Further cases or statutes the claimant should source and feed back in, and why each would help.',
+        items: {
+          type: 'object',
+          properties: {
+            what: { type: 'string', description: 'What to go and find, described so they could search for it.' },
+            why: { type: 'string', description: 'What gap in the current picture it would fill.' },
+            related: relatedIndices,
+          },
+          required: ['what', 'why', 'related'],
         },
       },
       links: {
@@ -410,7 +481,7 @@ const CASE_SUMMARY_TOOL = {
         },
       },
     },
-    required: ['overall_note', 'law', 'strengths', 'weaknesses', 'searches', 'links'],
+    required: ['overall_note', 'law', 'strengths', 'weaknesses', 'organisation', 'searches', 'digest_prompts', 'further_sources', 'links'],
   },
 }
 
@@ -418,27 +489,38 @@ const CASE_SUMMARY_PROMPT = `You are the Case Summary layer inside TribUnal, a c
 claimants in Singapore's Small Claims Tribunals (SCT). You are NOT a lawyer. You must never give legal advice, \
 predict the outcome, tell the claimant what to argue, or state a legal conclusion as settled fact.
 
+PURPOSE
+- Find as many relevant statutes and provisions as possible.
+- Recommend Boolean or advanced searches to find relevant cases.
+- Recommend words and phrases to Control-F for within those cases.
+- Recommend ways to digest the cases using AI.
+
+RULES
+- ALWAYS build recommended searches from the advanced-search operators set out below, and nothing else.
+- ALWAYS accompany every recommended search with a natural-language explanation of what the search means.
+
 You will receive SOURCE FACTS: everything the claimant entered themselves — their eligibility answers, their \
 intake answers in their own words, and the case timeline. Treat these as the only facts that exist. Do not \
 invent, assume or embellish anything, and do not fill gaps with what "usually" happens.
 
-Your purpose is to give the claimant the most complete picture their own facts will support: every \
-statutory provision that could bear on the claim, where their account is strongest, where it is weakest, \
-and what they should read next.
+METHOD
 
-Produce an indexed summary with five parts:
+1. Read all the client information and case information you are given before writing anything.
 
-1. RELEVANT LAW — the rules that bear on this claim, drawn ONLY from these sources:
+2. STATUTE SEARCHES — research and recommend as many relevant Singapore statutes as possible, drawn ONLY \
+from these sources:
 ${SOURCES.map((s) => `   - ${s.id}: ${s.label} — ${s.about}`).join('\n')}
-   Work through the list systematically and find as many relevant provisions as the facts support. Be \
-thorough rather than minimal — most claims engage more than one statute and more than one provision \
-within each. A consumer claim against a business, for example, will usually engage the SCT's \
-jurisdiction and limit provisions, the procedural rules for lodging and hearing it, AND the consumer \
-protection regime; a claim that names the wrong forum will engage the statute that sends it elsewhere. \
-Do not stop at the single most obvious rule.
+   Each statute is a heading; under each heading recommend as many relevant provisions as possible. Work \
+through the list systematically and be thorough rather than minimal — most claims engage more than one \
+statute and more than one provision within each. A consumer claim against a business, for example, will \
+usually engage the SCT's jurisdiction and limit provisions, the procedural rules for lodging and hearing \
+it, AND the consumer protection regime; a claim that names the wrong forum will engage the statute that \
+sends it elsewhere. Do not stop at the single most obvious rule.
    For each entry give: what the rule says AS 2-4 SHORT BULLET POINTS (one idea per bullet, plain \
-English, no legalese), why it matters for THIS claimant's stated facts, and the specific sections engaged. Order entries from most directly relevant to least — the L1, L2, … labels \
-follow that order, so the ordering is the ranking.
+English, no legalese), why it matters for THIS claimant's stated facts, and the specific sections \
+engaged. ALWAYS order the headings from most directly relevant to least — the L1, L2, … labels follow \
+that order, so the ordering is the ranking. The claimant is shown the required non-exhaustiveness \
+disclaimer beneath this section automatically; you do not need to write it.
    Cite a section number only where you are confident it is correct; an empty provision list is better \
 than a guessed section. Never cite other statutes or anything not on the list above — a fabricated \
 authority is worse than no authority.
@@ -451,13 +533,13 @@ of no decision on the provision at all. Every citation is checked for form, show
 as unverified until they confirm it in the database themselves, and stripped from any export until \
 they do.
 
-2. STRONGEST ARGUMENTS — the points where the claimant's own account and evidence are clearest. Each must \
+3. STRONGEST ARGUMENTS — the points where the claimant's own account and evidence are clearest. Each must \
 trace back to specific stated facts: give 2-4 SHORT BULLET POINTS in the basis_points field, quoting or \
 closely paraphrasing the claimant's own words, one fact per bullet, so they can see exactly what the \
-point rests on. Each MUST cite at least one L-label: the rule it \
-is strong under. If no listed rule fits, add that rule to RELEVANT LAW first. Label S1, S2, …
+point rests on. Each MUST cite at least one L-label: the rule it is strong under. If no listed rule fits, \
+add that rule to STATUTE SEARCHES first. Label S1, S2, …
 
-3. WEAKNESSES — be critical and specific. Look for: facts stated without evidence, dates or amounts that are \
+4. WEAKNESSES — be critical and specific. Look for: facts stated without evidence, dates or amounts that are \
 vague or inconsistent, anything the claimant said they were unsure about, steps not yet taken (e.g. no \
 demand made, no attempt to negotiate), legal conclusions asserted as fact, and points the respondent \
 would obviously dispute. For each, say what evidence would address it, and cite at least one L-label: \
@@ -465,8 +547,14 @@ the rule the gap matters under. Label W1, W2, … A thin or one-sided account sh
 weaknesses, not fewer. Do not soften a real problem to be encouraging. Give the reasons as 2-4 SHORT \
 BULLET POINTS in the why_points field, one reason per bullet.
 
-4. CASE SEARCHES — at least TEN searches the claimant can run on the Singapore Judiciary judgments site to \
-find relevant case law. Use ONLY these eLitigation advanced-search operators:
+5. ORGANISATION — how the claimant should order their argument. Default to strongest point first and \
+weakest last. Depart from that ONLY where another organisation is genuinely easier to follow — by issue, \
+by chronological step, by element of the claim — and if you do, say in the rationale why that ordering \
+follows the case better. Give each part of the structure a heading and dotpoints saying what goes \
+there and why, referring to the S and W labels the part draws on.
+
+6. CASE SEARCHES — at least TEN searches the claimant can run on the Singapore Judiciary judgments site to \
+find relevant case law. Use ONLY these advanced-search operators:
 
 ${SEARCH_OPERATORS}
 
@@ -479,17 +567,36 @@ the results.
 operators do in words, so the claimant understands the search rather than just pasting it. Keep quotes \
 and brackets balanced. Choose distinctive keywords: words that appear in almost every judgment will \
 bury the useful results.
+   For each search, also give the words and phrases the claimant should Control-F for once a judgment is \
+open, so they can find the relevant passage without reading the whole thing.
    Do NOT name any case, judge or citation in a SEARCH. A search is a query, not an authority: your job \
 here is to help the claimant FIND judgments, never to assert what they say.
 
-5. LINKS — which of the listed sources the claimant should actually read, with one sentence on what to \
-look for there, and which L/S/W items each supports. Only include sources relevant to this claim.
+7. DIGESTING WITH AI — short, concrete prompts the claimant can paste into an AI assistant, together with a \
+judgment they have downloaded, to make sense of it. Each prompt should ask for something checkable \
+against the text of the judgment — its facts, its issue, what the court decided and at which paragraph — \
+never for a prediction about the claimant's own case.
+
+EVERY DOTPOINT, EVERYWHERE
+Every supporting argument in STRONGEST ARGUMENTS, WEAKNESSES and ORGANISATION is a dotpoint, and every \
+dotpoint carries its own authority field: a pinpoint reference to the provision, or to the case and the \
+paragraph it was read at ("Small Claims Tribunals Act 1984 s 5(3)(a)", "[2019] 2 SLR 1234 at [42]"). \
+Where a dotpoint rests only on what the claimant told you, the authority is "Claimant's own account" — \
+say that plainly rather than dressing an assertion up as an authority. Where the source is a document \
+the claimant uploaded, the dotpoint must ALSO carry the quotation itself in its citations field, with \
+the document it comes from and the paragraph it appears at. A dotpoint that can point at nothing does \
+not belong in the list at all.
+
+
+8. FURTHER SOURCES — what further cases or statutes the claimant should source and feed back in, and why \
+each would help. Be specific about what is currently missing from the picture.
 
 UPLOADED DOCUMENTS
 The claimant may also supply documents — judgments, statutes, contracts, correspondence — labelled D1, D2, …
-When they do, ground your strengths and weaknesses in them. For each point, quote the words that support it \
-in the citations field, and say where the quote appears: the numbered paragraph if the document has \
-numbering (judgments do), otherwise the page or section.
+When they do, ground your strengths, weaknesses and organisation in them. For each point, quote the words \
+that support it in the citations field, and say where the quote appears: the numbered paragraph if the \
+document has numbering (judgments do), otherwise the page or section. Every dotpoint that rests on an \
+uploaded document MUST carry its quotation and pinpoint.
 
 Quoting rules, which matter more than anything else here:
 - Copy quotes CHARACTER FOR CHARACTER from the document text you were given. Never paraphrase inside \
@@ -646,23 +753,53 @@ function shapeCaseSummary(raw, docs = []) {
     return { citations, claimedCitations: checked.length }
   }
 
-  const rawStrengths = asArray(raw.strengths).map((s) => ({
-    point: String(s.point ?? ''),
-    basisPoints: asArray(s.basis_points).map((t) => String(t).trim()).filter(Boolean),
-    related: cleanIndices(s.related),
-    ...gradeCitations(s.citations),
-  }))
-  const rawWeaknesses = asArray(raw.weaknesses).map((w) => ({
-    point: String(w.point ?? ''),
-    whyPoints: asArray(w.why_points).map((t) => String(t).trim()).filter(Boolean),
-    evidenceNeeded: String(w.evidence_needed ?? ''),
-    related: cleanIndices(w.related),
-    ...gradeCitations(w.citations),
-  }))
+  // Each supporting argument is a dotpoint with its own pinpoint reference and
+  // its own quotations, so verification and pruning happen per dotpoint rather
+  // than per item. Older stored output had plain strings here; those are kept
+  // as text with no authority rather than discarded.
+  function gradeDotpoints(raw) {
+    const graded = asArray(raw)
+      .map((d) => {
+        if (typeof d === 'string') {
+          return { text: d.trim(), authority: '', citations: [], claimedCitations: 0 }
+        }
+        return {
+          text: String(d?.text ?? '').trim(),
+          authority: String(d?.authority ?? '').trim(),
+          ...gradeCitations(d?.citations),
+        }
+      })
+      .filter((d) => d.text)
+    const { kept, removed } = pruneUnsupported(graded)
+    integrity.pointsDeleted += removed.length
+    for (const d of kept) delete d.claimedCitations
+    return kept
+  }
 
-  const prunedS = pruneUnsupported(rawStrengths)
-  const prunedW = pruneUnsupported(rawWeaknesses)
-  integrity.pointsDeleted = prunedS.removed.length + prunedW.removed.length
+  // An item survives only if it still has a dotpoint standing behind it.
+  const withPoints = (items) => {
+    const kept = items.filter((it) => it.dotpoints.length > 0)
+    integrity.pointsDeleted += items.length - kept.length
+    return kept
+  }
+  const rawStrengths = withPoints(
+    asArray(raw.strengths).map((s) => ({
+      point: String(s.point ?? ''),
+      dotpoints: gradeDotpoints(s.basis_points),
+      related: cleanIndices(s.related),
+    })),
+  )
+  const rawWeaknesses = withPoints(
+    asArray(raw.weaknesses).map((w) => ({
+      point: String(w.point ?? ''),
+      dotpoints: gradeDotpoints(w.why_points),
+      evidenceNeeded: String(w.evidence_needed ?? ''),
+      related: cleanIndices(w.related),
+    })),
+  )
+
+  const prunedS = { kept: rawStrengths }
+  const prunedW = { kept: rawWeaknesses }
 
   // Labels are assigned after pruning so they stay contiguous, which means
   // cross-references written against the pre-prune ordering have to be
@@ -681,11 +818,16 @@ function shapeCaseSummary(raw, docs = []) {
   const fixRefs = (refs) =>
     refs.map((r) => (r[0] === 'S' || r[0] === 'W' ? remap[r] : r)).filter(Boolean)
   for (const item of [...strengths, ...weaknesses]) item.related = fixRefs(item.related)
-  for (const item of [...strengths, ...weaknesses]) delete item.claimedCitations
 
   const scopeRank = { broad: 0, medium: 1, narrow: 2 }
   const searches = asArray(raw.searches)
-    .map((s) => ({ query: String(s.query ?? '').trim(), explanation: String(s.explanation ?? ''), scope: s.scope, addresses: fixRefs(cleanIndices(s.addresses)) }))
+    .map((s) => ({
+      query: String(s.query ?? '').trim(),
+      explanation: String(s.explanation ?? ''),
+      scope: s.scope,
+      controlF: asArray(s.control_f).map((t) => String(t).trim()).filter(Boolean),
+      addresses: fixRefs(cleanIndices(s.addresses)),
+    }))
     .filter((s) => s.query)
     .sort((a, b) => (scopeRank[a.scope] ?? 1) - (scopeRank[b.scope] ?? 1))
     .map((s, i) => ({ ...s, index: `Q${i + 1}`, problem: searchSyntaxProblem(s.query) }))
@@ -698,12 +840,35 @@ function shapeCaseSummary(raw, docs = []) {
       reason: String(l.reason ?? ''),
       related: fixRefs(cleanIndices(l.related)),
     }))
+  // The organisation dotpoints go through the same citation pipeline as the
+  // strengths and weaknesses: quotes that are not in the document they name
+  // are deleted, and a section left with nothing is dropped.
+  const orgSections = withPoints(
+    asArray(raw.organisation?.sections).map((sec) => ({
+      heading: String(sec.heading ?? ''),
+      dotpoints: gradeDotpoints(sec.points),
+      related: fixRefs(cleanIndices(sec.related)),
+    })),
+  )
+  const organisation = raw.organisation
+    ? {
+        approach: String(raw.organisation.approach ?? ''),
+        rationale: String(raw.organisation.rationale ?? ''),
+        sections: orgSections,
+      }
+    : null
+
   return {
     overallNote: String(raw.overall_note ?? ''),
     law,
     strengths,
     weaknesses,
+    organisation,
     searches,
+    digestPrompts: asArray(raw.digest_prompts).map((t) => String(t).trim()).filter(Boolean),
+    furtherSources: asArray(raw.further_sources)
+      .map((f) => ({ what: String(f.what ?? ''), why: String(f.why ?? ''), related: fixRefs(cleanIndices(f.related)) }))
+      .filter((f) => f.what),
     links,
     integrity,
     documents: docs.map((d) => ({ index: d.index, name: d.name, truncated: d.truncated })),

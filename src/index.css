@@ -2000,3 +2000,84 @@ a.idx:hover {
   color: var(--muted);
   font-style: italic;
 }
+
+/* ---------- Summary how-to blocks ---------- */
+.howto {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin: 1rem 0 1.25rem;
+}
+.howto h3 {
+  margin: 0 0 0.5rem;
+}
+.howto-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+.subhead {
+  margin: 1.1rem 0 0.35rem;
+  font-size: 0.95rem;
+  color: var(--navy);
+}
+.digest-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.digest-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+.digest-list code {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+.ctrl-f {
+  background: var(--blue-soft);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  font-size: 0.85em;
+}
+.idx-O {
+  background: var(--navy);
+  color: #fff;
+}
+
+/* ---------- Dotpoints with their own authority ---------- */
+.dotpoint-list {
+  margin: 0.3rem 0 0.5rem;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.dotpoint {
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+.dotpoint-text {
+  display: inline;
+}
+.dotpoint-authority {
+  display: inline-block;
+  margin-left: 0.4rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.02rem 0.35rem;
+  font-size: 0.78rem;
+  color: var(--navy);
+  white-space: nowrap;
+}
