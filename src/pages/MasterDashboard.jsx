@@ -1,12 +1,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
-import { stages, currentStageOf } from '../data/caseEvents.js'
+import { stageById, currentStageOf } from '../data/caseEvents.js'
 import CaseCalendar from '../components/CaseCalendar.jsx'
 import SuperBadge from '../components/SuperBadge.jsx'
 import SuperCaseForm from '../components/SuperCaseForm.jsx'
 
-const stageLabel = (id) => stages[id]?.label ?? 'Unknown'
+const stageLabel = (id) => stageById(id)?.short ?? 'Unknown'
 
 export default function MasterDashboard() {
   const { user, isSuper, logout, cases, updateCase, removeCase } = useCase()
@@ -105,7 +105,7 @@ export default function MasterDashboard() {
           </div>
           <div className="case-cards">
             {cases.map((c) => {
-              const currentStage = currentStageOf(c.events)
+              const currentStage = currentStageOf(c)
               if (editingId === c.id) {
                 return (
                   <div key={c.id} className="case-card case-card-editing">

@@ -13,7 +13,7 @@ const EVENT_TYPES = [
 export default function SuperEventForm({ initial, onSave, onCancel, onDelete }) {
   const [form, setForm] = useState({
     date: initial?.date ?? today(),
-    stage: initial?.stage ?? 0,
+    stage: initial?.stage ?? 1,
     type: initial?.type ?? 'court',
     title: initial?.title ?? '',
     detail: initial?.detail ?? '',

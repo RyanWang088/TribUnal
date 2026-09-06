@@ -1,4 +1,4 @@
-import { stages } from '../data/caseEvents.js'
+import { stageById } from '../data/caseEvents.js'
 
 const typeLabel = {
   user: 'You',
@@ -39,7 +39,7 @@ export default function Timeline({ events, onEdit, editingId, renderEditor }) {
                 <span className="timeline-date">{formatDate(ev.date)}</span>
                 <span className={`pill pill-${ev.type}`}>{typeLabel[ev.type]}</span>
                 <span className="pill pill-stage">
-                  Stage {ev.stage} · {stages[ev.stage].label}
+                  Stage {ev.stage} · {stageById(ev.stage)?.label ?? 'Unknown'}
                 </span>
                 {onEdit && (
                   <button type="button" className="btn-link timeline-edit" onClick={() => onEdit(ev)}>

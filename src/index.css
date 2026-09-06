@@ -725,23 +725,53 @@ a {
   padding: 0;
   margin: 0 0 1rem;
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 0.4rem;
 }
 .stage-track li {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.4rem;
-  text-align: center;
   font-size: 0.75rem;
   color: var(--muted);
   position: relative;
 }
+.stage-btn {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0.35rem 0.15rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.stage-btn:hover {
+  background: var(--bg);
+}
+.stage-btn:hover .stage-num {
+  border-color: var(--gold);
+}
+.stage-btn:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+.stage-count {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.stage-track-countdown {
+  font-size: 0.68rem;
+  color: var(--navy);
+  white-space: nowrap;
+}
 .stage-track li::before {
   content: '';
   position: absolute;
-  top: 14px;
+  top: 20px;
   left: 50%;
   width: 100%;
   height: 2px;
@@ -1601,12 +1631,62 @@ a.idx:hover {
   .grid {
     grid-template-columns: 1fr;
   }
+  /* Keep the case navigation reachable on small screens: instead of hiding
+     the sidebar, lay it out as a horizontal, scrollable strip that sticks
+     directly under the topbar. */
+  .dash-body {
+    flex-direction: column;
+  }
   .sidebar {
-    display: none;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    top: 60px;
+    z-index: 9;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sidebar > * {
+    flex: 0 0 auto;
+  }
+  .sidebar ul {
+    grid-auto-flow: column;
+    grid-auto-columns: max-content;
+    gap: 0.25rem;
+  }
+  .sidebar button:not(.btn) {
+    width: auto;
+    white-space: nowrap;
+    padding: 0.45rem 0.7rem;
+  }
+  .sidebar button.active {
+    border-left: none;
+    border-bottom: 3px solid var(--gold);
+    border-radius: 8px 8px 0 0;
+  }
+  .sidebar .back-link {
+    white-space: nowrap;
+  }
+  .sidebar-foot {
+    margin-top: 0;
+    margin-left: auto;
+  }
+  .sidebar-foot .btn {
+    width: auto;
+    white-space: nowrap;
   }
   .stage-track {
     grid-template-columns: repeat(4, 1fr);
     row-gap: 1rem;
+  }
+  .stage-modal-foot {
+    flex-direction: column;
+    align-items: stretch;
   }
   .stage-track li::before {
     display: none;
@@ -1617,4 +1697,202 @@ a.idx:hover {
   .topbar-sub {
     display: none;
   }
+}
+
+@media (max-width: 560px) {
+  .topbar {
+    padding: 0 0.85rem;
+    gap: 0.5rem;
+  }
+  .topbar-brand {
+    min-width: 0;
+  }
+  .topbar-right {
+    gap: 0.6rem;
+    font-size: 0.85rem;
+    min-width: 0;
+  }
+  .topbar-user {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 8ch;
+  }
+  .topbar-right .btn {
+    padding: 0.35rem 0.6rem;
+    white-space: nowrap;
+  }
+  .content,
+  .content-master {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* ---------- Stage popup ---------- */
+.stage-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 18, 38, 0.6);
+  backdrop-filter: blur(2px);
+  display: grid;
+  place-items: center;
+  z-index: 90;
+  padding: 1.5rem;
+}
+.stage-modal {
+  background: var(--surface);
+  border-radius: 12px;
+  max-width: 560px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+  border-top: 5px solid var(--gold);
+}
+.stage-modal-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 1.15rem 1.35rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+}
+.stage-modal-head h2 {
+  font-size: 1.1rem;
+  color: var(--navy);
+  flex: 1;
+  min-width: 0;
+}
+.stage-modal-num {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--navy);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+.stage-modal-num.done {
+  background: var(--ok);
+}
+.stage-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 0.2rem;
+  border-radius: 6px;
+}
+.stage-modal-close:hover {
+  color: var(--text);
+}
+.stage-modal-body {
+  padding: 1.1rem 1.35rem;
+  overflow-y: auto;
+}
+.stage-modal-sub {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 0.4rem;
+}
+.stage-modal-sub + .stage-tasks,
+.stage-modal-what {
+  margin-bottom: 1.15rem;
+}
+.stage-modal-what {
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+.stage-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.3rem;
+}
+.stage-tasks label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.92rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.stage-tasks label:hover {
+  background: var(--bg);
+}
+.stage-tasks label.checked {
+  background: var(--blue-soft);
+  border-color: var(--blue);
+}
+.stage-tasks label.checked span {
+  color: var(--navy);
+}
+.stage-tasks input {
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+.stage-date {
+  border-top: 1px solid var(--border);
+  padding-top: 0.9rem;
+}
+.stage-date-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+}
+.stage-date-label {
+  color: var(--muted);
+}
+.stage-countdown {
+  background: var(--blue-soft);
+  color: var(--navy);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.stage-date-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.stage-date-edit input {
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.stage-modal-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.9rem 1.35rem 1.15rem;
+  border-top: 1px solid var(--border);
+}
+.stage-next {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+.stage-next strong {
+  color: var(--navy);
+  font-size: 0.92rem;
 }

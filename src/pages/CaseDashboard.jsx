@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { useCase } from '../context/CaseContext.jsx'
 import { stages, simulatedUpdates, currentStageOf } from '../data/caseEvents.js'
+import { LAST_STAGE, countdownLabel, isStageComplete, stageTasksDone } from '../data/stages.js'
 import { openQuestions } from '../data/questions.js'
 import Timeline from '../components/Timeline.jsx'
 import DisclaimerModal from '../components/DisclaimerModal.jsx'
 import SuperBadge from '../components/SuperBadge.jsx'
 import SuperEventForm from '../components/SuperEventForm.jsx'
 import SuperCaseForm from '../components/SuperCaseForm.jsx'
+import StageModal from '../components/StageModal.jsx'
 import RealityCheck from './RealityCheck.jsx'
 import CaseSummary from './CaseSummary.jsx'
 import EvidenceMap from './EvidenceMap.jsx'
@@ -23,21 +25,25 @@ const navItems = [
   { key: 'links', label: 'Relevant Links', icon: '¶' },
 ]
 
-const nextStepByStage = {
-  1: 'Wait for the respondent to engage. If they do not, prepare your statement of claim.',
-  2: 'Check that every fact in your narrative has a labelled attachment behind it.',
-  3: 'Read the Response carefully. Update your Reality Check with the respondent\'s version of events.',
-  4: 'Prepare your document bundle and decide your realistic best and worst outcomes before consultation.',
-  5: 'Rehearse answering the Referee\'s questions directly. Bring originals of all evidence.',
-  6: 'An order is not payment. Look up enforcement options in the State Courts if the respondent does not pay.',
-}
 
 // Every case dashboard mount shows the disclaimer modal: first entry,
 // a manual refresh, or navigating back into the case from elsewhere.
 // It is deliberately not remembered across mounts.
 export default function CaseDashboard() {
   const { caseId } = useParams()
-  const { user, isSuper, logout, getCase, addEvent, updateEvent, removeEvent, updateCase } = useCase()
+  const {
+    user,
+    isSuper,
+    logout,
+    getCase,
+    addEvent,
+    updateEvent,
+    removeEvent,
+    updateCase,
+    toggleStageTask,
+    skipStage,
+    setStageDate,
+  } = useCase()
   const navigate = useNavigate()
   const [active, setActive] = useState('home')
   const [used, setUsed] = useState([])
@@ -48,19 +54,27 @@ export default function CaseDashboard() {
   const [addingEvent, setAddingEvent] = useState(false)
   const [editingPanel, setEditingPanel] = useState(null)
   const [healthDraft, setHealthDraft] = useState(null)
+  // Which stage's popup is open, or null. Any stage can be opened, not just
+  // the current one, so the claimant can read ahead or look back.
+  const [openStage, setOpenStage] = useState(null)
 
   const caseData = getCase(caseId)
   if (!caseData) return <Navigate to="/dashboard" replace />
 
   const { events, intakeAnswers, ref, title, claimType, respondent, amount, summary, healthOverride } = caseData
-  const maxEventStage = events.reduce((max, ev) => Math.max(max, ev.stage), 0)
-  const currentStage = currentStageOf(events)
-  // Nothing has happened beyond the forum check yet, so the claimant has
-  // not actually opened negotiation — say that rather than "wait".
-  const nextStep =
-    maxEventStage < 1
-      ? 'Invite the respondent to negotiate on CJTS.'
-      : nextStepByStage[currentStage]
+  const stageProgress = caseData.stageProgress ?? {}
+  const stageDates = caseData.stageDates ?? {}
+  const currentStage = currentStageOf(caseData)
+  // The suggested next step is the current stage's own "what you need to do":
+  // the first checkbox still outstanding, or where the case goes once the
+  // stage is finished.
+  const currentStageDef = stages.find((st) => st.id === currentStage)
+  const outstanding = currentStageDef?.tasks.find((t) => !stageProgress[currentStage]?.[t.id])
+  const nextStep = outstanding
+    ? outstanding.label
+    : currentStageDef?.next
+      ? `${currentStageDef.next}`
+      : 'Check the Tribunal Order and any deadlines it sets.'
   const correspondence = events.filter((ev) => ev.type === 'court' || ev.type === 'respondent')
   const questionIds = openQuestions.map((q) => q.id)
   const derivedAnswered = intakeAnswers ? questionIds.filter((id) => intakeAnswers[id] !== undefined).length : 0
@@ -116,6 +130,17 @@ export default function CaseDashboard() {
 
   return (
     <div className="dash">
+      {openStage !== null && (
+        <StageModal
+          stageId={openStage}
+          progress={stageProgress}
+          date={stageDates[openStage] ?? null}
+          onToggle={(stageId, taskId) => toggleStageTask(caseId, stageId, taskId)}
+          onSetDate={(stageId, date) => setStageDate(caseId, stageId, date)}
+          onSkip={(stageId) => skipStage(caseId, stageId)}
+          onClose={() => setOpenStage(null)}
+        />
+      )}
       {disclaimerOpen && <DisclaimerModal onContinue={() => setDisclaimerOpen(false)} />}
 
       <header className="topbar">
@@ -181,18 +206,34 @@ export default function CaseDashboard() {
               <section className="card stage-card">
                 <div className="card-head">
                   <h2>Where your case is</h2>
-                  <span className="muted">Stage {currentStage} of 6</span>
+                  <span className="muted">
+                    Stage {currentStage} of {LAST_STAGE}
+                  </span>
                 </div>
                 <ol className="stage-track">
-                  {stages.map((s) => (
-                    <li
-                      key={s.id}
-                      className={s.id < currentStage ? 'done' : s.id === currentStage ? 'current' : ''}
-                    >
-                      <span className="stage-num">{s.id}</span>
-                      <span className="stage-label">{s.label}</span>
-                    </li>
-                  ))}
+                  {stages.map((st) => {
+                    const complete = isStageComplete(stageProgress, st.id)
+                    const state = complete || st.id < currentStage ? 'done' : st.id === currentStage ? 'current' : ''
+                    const ticked = stageTasksDone(stageProgress, st.id)
+                    const countdown = st.dateKind ? countdownLabel(st.dateKind, stageDates[st.id]) : null
+                    return (
+                      <li key={st.id} className={state}>
+                        <button
+                          type="button"
+                          className="stage-btn"
+                          onClick={() => setOpenStage(st.id)}
+                          aria-label={`Stage ${st.id}: ${st.label}`}
+                        >
+                          <span className="stage-num">{complete ? '✓' : st.id}</span>
+                          <span className="stage-label">{st.short}</span>
+                          <span className="stage-count">
+                            {stageProgress[st.id]?.skipped ? 'Skipped' : `${ticked}/${st.tasks.length}`}
+                          </span>
+                          {countdown && <span className="stage-track-countdown">{countdown}</span>}
+                        </button>
+                      </li>
+                    )
+                  })}
                 </ol>
                 <div className="next-step">
                   <strong>Suggested next step:</strong> {nextStep}

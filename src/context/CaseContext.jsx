@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { seedCases } from '../data/cases.js'
+import { SEED_VERSION, seedCases } from '../data/cases.js'
 import { buildCaseFacts } from '../data/caseFacts.js'
 import { PLACEHOLDER_TITLE, suggestTitle } from '../data/caseTitle.js'
 import { deleteCaseDocuments } from '../data/documentStore.js'
@@ -15,6 +15,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 const ACCOUNTS_KEY = 'tribunal.accounts'
 const SESSION_KEY = 'tribunal.session'
 const CASES_KEY = 'tribunal.cases'
+const SEED_VERSION_KEY = 'tribunal.seedVersion'
 
 // Built-in account that always works, even on a fresh browser with no
 // localStorage accounts. Prototype only — this is visible in source.
@@ -52,15 +53,26 @@ function loadSessionUser() {
   }
 }
 
-// Seeds only on the very first run. Once anything has been stored, that is
-// the source of truth — including an empty list, so deleting every case does
-// not bring the demo seeds back.
+// Replaces every stored demo case with its current definition, restoring any
+// that had been deleted, and keeps cases created through the app as they are.
+function refreshSeeds(stored) {
+  const seedIds = new Set(seedCases.map((c) => c.id))
+  return [...seedCases, ...stored.filter((c) => !seedIds.has(c.id))]
+}
+
+// Seeds on the very first run. After that the stored list is the source of
+// truth — including an empty list, so deleting every case does not bring the
+// demo seeds back. The one exception is a SEED_VERSION bump, which refreshes
+// the demo cases in place so edits to cases.js show up on the next reload
+// without clearing localStorage.
 function loadCases() {
   try {
     const raw = localStorage.getItem(CASES_KEY)
     if (raw === null) return seedCases
     const stored = JSON.parse(raw)
-    return Array.isArray(stored) ? stored : seedCases
+    if (!Array.isArray(stored)) return seedCases
+    if (localStorage.getItem(SEED_VERSION_KEY) === String(SEED_VERSION)) return stored
+    return refreshSeeds(stored)
   } catch {
     return seedCases
   }
@@ -73,6 +85,7 @@ export function CaseProvider({ children }) {
 
   useEffect(() => {
     localStorage.setItem(CASES_KEY, JSON.stringify(cases))
+    localStorage.setItem(SEED_VERSION_KEY, String(SEED_VERSION))
   }, [cases])
 
   // Backfills the AI title for any completed case still carrying the
@@ -172,7 +185,7 @@ export function CaseProvider({ children }) {
             {
               id: `seed-${id}-1`,
               date: today(),
-              stage: 0,
+              stage: 1,
               type: 'system',
               title: 'Case file created',
               detail: 'TribUnal opened a new case file for this matter.',
@@ -180,7 +193,7 @@ export function CaseProvider({ children }) {
             {
               id: `seed-${id}-2`,
               date: today(),
-              stage: 0,
+              stage: 1,
               type: 'system',
               title: 'Eligibility screening passed',
               detail:
@@ -191,6 +204,37 @@ export function CaseProvider({ children }) {
         setCases((prev) => [...prev, newCase])
         return id
       },
+      // Stage checklists. `stageProgress` is keyed by stage id, then by task
+      // id; `skipped` marks an optional stage the claimant stepped past.
+      // Completing every task is what advances the case (see currentStageOf).
+      toggleStageTask: (caseId, stageId, taskId) =>
+        setCases((prev) =>
+          prev.map((c) => {
+            if (c.id !== caseId) return c
+            const progress = c.stageProgress ?? {}
+            const stage = { ...(progress[stageId] ?? {}) }
+            if (stage[taskId]) delete stage[taskId]
+            else stage[taskId] = true
+            return { ...c, stageProgress: { ...progress, [stageId]: stage } }
+          }),
+        ),
+      skipStage: (caseId, stageId) =>
+        setCases((prev) =>
+          prev.map((c) => {
+            if (c.id !== caseId) return c
+            const progress = c.stageProgress ?? {}
+            const stage = { ...(progress[stageId] ?? {}) }
+            if (stage.skipped) delete stage.skipped
+            else stage.skipped = true
+            return { ...c, stageProgress: { ...progress, [stageId]: stage } }
+          }),
+        ),
+      setStageDate: (caseId, stageId, date) =>
+        setCases((prev) =>
+          prev.map((c) =>
+            c.id === caseId ? { ...c, stageDates: { ...(c.stageDates ?? {}), [stageId]: date } } : c,
+          ),
+        ),
       removeCase: (caseId) => {
         setCases((prev) => prev.filter((c) => c.id !== caseId))
         deleteCaseDocuments(caseId).catch(() => {})
@@ -229,7 +273,7 @@ export function CaseProvider({ children }) {
                     {
                       id: `intake-${Date.now()}`,
                       date: today(),
-                      stage: 0,
+                      stage: 1,
                       type: 'user',
                       title: 'Intake questionnaire completed',
                       detail: 'Your answers have been saved to your case file.',

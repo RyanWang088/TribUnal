@@ -1,6 +1,6 @@
 import { openQuestions } from './questions.js'
 import { eligibilityQuestions } from './eligibility.js'
-import { stages } from './caseEvents.js'
+import { stageById } from './caseEvents.js'
 
 const WHO = { user: 'Claimant', court: 'Court', respondent: 'Respondent', system: 'TribUnal' }
 
@@ -51,7 +51,7 @@ export function buildCaseFacts(caseData) {
     evidenceUploaded: Object.keys(evidence).length ? evidence : null,
     timeline: (events ?? []).map((ev) => ({
       date: ev.date,
-      stage: `${ev.stage} · ${stages[ev.stage]?.label ?? 'Unknown'}`,
+      stage: `${ev.stage} · ${stageById(ev.stage)?.label ?? 'Unknown'}`,
       from: WHO[ev.type] ?? ev.type,
       title: ev.title,
       detail: ev.detail,
